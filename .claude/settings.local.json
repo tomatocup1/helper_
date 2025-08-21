@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(chmod:*)",
+      "Bash(pip install:*)",
+      "Bash(redis-server:*)",
+      "Bash(playwright install:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(export:*)",
+      "Bash(export HEADLESS_BROWSER=false)",
+      "Bash(rm:*)",
+      "Bash(timeout:*)",
+      "Bash(taskkill:*)",
+      "Bash(PYTHONIOENCODING=utf-8:ignore python simple_baemin_api.py)",
+      "Bash(chcp:*)",
+      "Bash(LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 PYTHONIOENCODING=utf-8 python simple_baemin_api.py)",
+      "Bash(set PYTHONIOENCODING=utf-8)",
+      "Bash(PYTHONIOENCODING=utf-8 python simple_baemin_api.py)",
+      "Bash(npm run dev:*)",
+      "Bash(set PYTHONUTF8=1)",
+      "Bash(find:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(cp:*)",
+      "Bash(wmic process where:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(set BACKEND_PORT=8002)",
+      "Bash(move:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\c\\helper_B",
+      "C:\\c",
+      "C:\\mnt\\c\\helper_B",
+      "C:\\c\\helper_B\\backend"
+    ]
+  }
+}

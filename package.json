@@ -1,0 +1,30 @@
+{
+  "name": "store-helper-proxy",
+  "version": "1.0.0",
+  "description": "Unified proxy server for Store Helper project",
+  "main": "proxy-server.js",
+  "scripts": {
+    "proxy": "node proxy-server.js",
+    "proxy:dev": "nodemon proxy-server.js",
+    "dev:all": "concurrently \"npm run proxy\" \"cd frontend && npm run dev\" \"cd backend && python main.py\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python main.py",
+    "install:all": "npm install && cd frontend && npm install",
+    "start": "npm run proxy"
+  },
+  "keywords": [
+    "proxy",
+    "development",
+    "store-helper"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.6"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.2"
+  }
+}
