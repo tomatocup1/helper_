@@ -86,7 +86,7 @@ export default function ReviewsPage() {
     }
   }, [user?.id])
 
-  // 리뷰 데이터 가져오기
+  // 리뷰 데이터 가져오기 (백엔드 API 사용)
   const fetchReviews = useCallback(async () => {
     if (!user?.id) return
 
@@ -94,11 +94,12 @@ export default function ReviewsPage() {
     setError(null)
 
     try {
-      // 사용자의 매장 ID들 가져오기
+      // 먼저 사용자의 매장들 가져오기
       const { data: userStores, error: storesError } = await supabase
         .from('platform_stores')
-        .select('id')
+        .select('*')
         .eq('user_id', user.id)
+        .eq('is_active', true)
 
       if (storesError) throw storesError
       if (!userStores || userStores.length === 0) {
@@ -107,28 +108,52 @@ export default function ReviewsPage() {
         return
       }
 
-      const storeIds = userStores.map(store => store.id)
-
-      // 리뷰 데이터 가져오기 (매장 정보와 함께)
-      let query = supabase
-        .from('reviews_naver')
-        .select(`
-          *,
-          platform_store:platform_stores(*)
-        `)
-        .in('platform_store_id', storeIds)
-        .order('review_date', { ascending: false })
-
+      // 백엔드 API 호출하여 모든 플랫폼의 리뷰 가져오기
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001'
+      let apiUrl = `${backendUrl}/api/v1/reviews?limit=500`
+      
       // 매장 필터 적용
       if (selectedStore !== 'all') {
-        query = query.eq('platform_store_id', selectedStore)
+        apiUrl += `&store_id=${selectedStore}`
       }
 
-      const { data: reviewsData, error: reviewsError } = await query
+      const response = await fetch(apiUrl)
+      if (!response.ok) {
+        throw new Error('리뷰 조회 API 호출 실패')
+      }
+      
+      const apiResult = await response.json()
+      if (!apiResult.success) {
+        throw new Error(apiResult.message || '리뷰 조회 실패')
+      }
 
-      if (reviewsError) throw reviewsError
+      // 매장 정보와 연결
+      const reviewsWithStore = apiResult.reviews.map((review: any) => {
+        const matchingStore = userStores.find(store => store.id === review.platform_store_id)
+        return {
+          ...review,
+          platform_store: matchingStore,
+          // 플랫폼별 필드명 통일 (요기요 → 네이버 형식으로)
+          rating: review.overall_rating || review.rating || 0,
+          reviewer_name: review.reviewer_name || '익명',
+          review_text: review.review_text || '',
+          review_date: review.review_date || review.created_at,
+          has_photos: review.has_photos || false,
+          photo_count: review.photo_count || 0,
+          // 요기요 고유 필드들
+          taste_rating: review.taste_rating,
+          quantity_rating: review.quantity_rating,
+          order_menu: review.order_menu,
+          yogiyo_dsid: review.yogiyo_dsid
+        }
+      }).filter((review: any) => 
+        // 사용자의 매장에 속하는 리뷰만 필터링
+        userStores.some(store => store.id === review.platform_store_id)
+      )
 
-      setReviews(reviewsData as ReviewWithStore[] || [])
+      setReviews(reviewsWithStore)
+      console.log(`리뷰 조회 완료: ${reviewsWithStore.length}개 (요기요 포함)`)
+      
     } catch (err) {
       console.error('Error fetching reviews:', err)
       setError('리뷰를 불러오는 중 오류가 발생했습니다.')
@@ -553,6 +578,17 @@ export default function ReviewsPage() {
                             />
                           ))}
                         </div>
+                        {/* 요기요 세부 별점 표시 */}
+                        {(review.taste_rating || review.quantity_rating) && (
+                          <div className="flex items-center space-x-2 text-xs text-gray-600">
+                            {review.taste_rating && (
+                              <span>맛 {review.taste_rating}★</span>
+                            )}
+                            {review.quantity_rating && (
+                              <span>양 {review.quantity_rating}★</span>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center space-x-2 text-sm text-gray-500">
                           <Calendar className="w-3 h-3" />
                           <span>{formatTime(review.review_date)}</span>
@@ -562,6 +598,12 @@ export default function ReviewsPage() {
                             <Image className="w-3 h-3" />
                             <span>{review.photo_count}장</span>
                           </div>
+                        )}
+                        {/* 플랫폼 표시 */}
+                        {review.platform && (
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {review.platform}
+                          </Badge>
                         )}
                       </div>
                     </div>
@@ -584,6 +626,15 @@ export default function ReviewsPage() {
                   {/* 리뷰 내용 */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-gray-800 whitespace-pre-wrap">{review.review_text || '내용 없음'}</p>
+                    
+                    {/* 요기요 주문 메뉴 표시 */}
+                    {review.order_menu && (
+                      <div className="mt-3 p-2 bg-blue-50 rounded border-l-4 border-blue-400">
+                        <p className="text-xs text-blue-700 font-medium">주문 메뉴</p>
+                        <p className="text-xs text-blue-800 mt-1">{review.order_menu}</p>
+                      </div>
+                    )}
+                    
                     {review.extracted_keywords && Array.isArray(review.extracted_keywords) && review.extracted_keywords.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-3">
                         {(review.extracted_keywords as string[]).map((keyword, idx) => (
