@@ -9,7 +9,7 @@ import os
 import re
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, asdict
 from enum import Enum
 
@@ -19,6 +19,9 @@ from dotenv import load_dotenv
 
 # 환경 변수 로드
 load_dotenv()
+
+# 멀티플랫폼 어댑터 시스템 임포트
+from platform_adapters import MultiPlatformManager, Platform, UnifiedReview, parse_platform_list
 
 
 class ReplyStatus(Enum):
@@ -113,6 +116,9 @@ class AIReplyManager:
             raise ValueError("Supabase 환경 변수가 설정되지 않았습니다")
         
         self.supabase: Client = create_client(supabase_url, supabase_key)
+        
+        # Multi-platform manager 초기화
+        self.platform_manager = MultiPlatformManager(self.supabase)
         
         # 처리 제한 설정
         self.max_concurrent = 5  # 동시 처리 리뷰 수
@@ -228,7 +234,7 @@ class AIReplyManager:
     async def analyze_review(self, review_data: Dict, store_settings: Dict) -> ReviewAnalysis:
         """리뷰 분석 및 위험도 평가"""
         
-        review_text = review_data.get('review_text', '').lower()
+        review_text = review_data.get('review_text') or ""
         rating = review_data.get('rating') or 3  # None인 경우 기본값 3점
         
         # 1. 감정 분석
@@ -259,6 +265,10 @@ class AIReplyManager:
         # rating이 None인 경우를 대비해 기본값 설정
         rating = rating or 3
         
+        # review_text가 None인 경우를 대비해 기본값 설정
+        review_text = review_text or ""
+        review_text = review_text.lower()
+        
         # 평점 기반 기본 감정
         if rating >= 4:
             base_sentiment = "positive"
@@ -270,20 +280,21 @@ class AIReplyManager:
             base_sentiment = "neutral"
             base_score = 0.5
         
-        # 텍스트 기반 감정 보정
-        positive_words = ["맛있", "좋", "만족", "친절", "깨끗", "분위기", "추천"]
-        negative_words = ["맛없", "별로", "실망", "불친절", "더러", "시끄럽", "비싸"]
-        
-        positive_count = sum(1 for word in positive_words if word in review_text)
-        negative_count = sum(1 for word in negative_words if word in review_text)
-        
-        # 보정 적용
-        if positive_count > negative_count and base_sentiment != "positive":
-            base_sentiment = "positive"
-            base_score = min(0.8, base_score + 0.2)
-        elif negative_count > positive_count and base_sentiment != "negative":
-            base_sentiment = "negative"
-            base_score = max(0.2, base_score - 0.2)
+        # 텍스트 기반 감정 보정 (텍스트가 있는 경우에만)
+        if review_text:
+            positive_words = ["맛있", "좋", "만족", "친절", "깨끗", "분위기", "추천"]
+            negative_words = ["맛없", "별로", "실망", "불친절", "더러", "시끄럽", "비싸"]
+            
+            positive_count = sum(1 for word in positive_words if word in review_text)
+            negative_count = sum(1 for word in negative_words if word in review_text)
+            
+            # 보정 적용
+            if positive_count > negative_count and base_sentiment != "positive":
+                base_sentiment = "positive"
+                base_score = min(0.8, base_score + 0.2)
+            elif negative_count > positive_count and base_sentiment != "negative":
+                base_sentiment = "negative"
+                base_score = max(0.2, base_score - 0.2)
         
         return base_sentiment, base_score
     
@@ -292,6 +303,9 @@ class AIReplyManager:
         
         # rating이 None인 경우를 대비해 기본값 설정
         rating = rating or 3
+        
+        # review_text가 None인 경우를 대비해 기본값 설정
+        review_text = review_text or ""
         
         try:
             # AI에게 위험도 평가 요청
@@ -810,7 +824,148 @@ class AIReplyManager:
             if '개선' not in reply_text and '노력' not in reply_text:
                 suggestions.append("구체적인 개선 계획을 언급해보세요")
     
-    # ===== 4. 배치 처리 기능 =====
+    # ===== 4. 멀티플랫폼 지원 기능 =====
+    
+    async def process_user_reviews(self, user_id: str, platforms: Optional[List[Union[str, Platform]]] = None, 
+                                 limit: Optional[int] = None) -> Dict[str, BatchSummary]:
+        """사용자의 모든 매장에서 리뷰 처리 (멀티플랫폼)"""
+        
+        start_time = datetime.now()
+        
+        if platforms is None:
+            platforms = list(Platform)
+        else:
+            # 문자열을 Platform enum으로 변환
+            platforms = parse_platform_list(platforms)
+        
+        print(f"[AI] 사용자 {user_id[:8]}... 멀티플랫폼 리뷰 처리 시작")
+        print(f"   대상 플랫폼: {[p.value.upper() for p in platforms]}")
+        
+        # 플랫폼별 결과 저장
+        platform_results = {}
+        
+        for platform in platforms:
+            try:
+                print(f"\n[PLATFORM] {platform.value.upper()} 플랫폼 처리 시작...")
+                
+                # 해당 플랫폼의 사용자 매장들 조회
+                stores = await self._get_user_stores(user_id, platform.value)
+                
+                if not stores:
+                    print(f"   매장 없음: {platform.value.upper()}")
+                    platform_results[platform.value] = BatchSummary(
+                        total_reviews=0, processed=0, success=0, failed=0, skipped=0,
+                        high_risk=0, requires_approval=0, auto_approved=0,
+                        processing_time_seconds=0.0, results=[]
+                    )
+                    continue
+                
+                print(f"   매장 수: {len(stores)}개")
+                
+                # 플랫폼별 전체 결과 누적
+                all_results = []
+                total_reviews_processed = 0
+                
+                for store in stores:
+                    store_id = store['id']
+                    store_name = store['store_name']
+                    
+                    print(f"   └─ [{store_name}] 처리 중...")
+                    
+                    # 매장별 리뷰 처리
+                    store_summary = await self.process_store_reviews(
+                        store_id, platform.value, limit
+                    )
+                    
+                    all_results.extend(store_summary.results)
+                    total_reviews_processed += store_summary.total_reviews
+                    
+                    # 매장 간 잠시 대기
+                    await asyncio.sleep(1)
+                
+                # 플랫폼별 요약 계산
+                platform_summary = self._calculate_summary(all_results, start_time)
+                platform_results[platform.value] = platform_summary
+                
+                print(f"   [OK] {platform.value.upper()}: {total_reviews_processed}개 리뷰 중 {platform_summary.success}개 처리 완료")
+                
+            except Exception as e:
+                print(f"   [ERROR] {platform.value.upper()} 플랫폼 처리 실패: {e}")
+                platform_results[platform.value] = BatchSummary(
+                    total_reviews=0, processed=0, success=0, failed=1, skipped=0,
+                    high_risk=0, requires_approval=0, auto_approved=0,
+                    processing_time_seconds=0.0, 
+                    results=[ProcessingResult(user_id, "failed", str(e))]
+                )
+        
+        # 전체 결과 요약 출력
+        self._print_multiplatform_summary(platform_results, user_id)
+        
+        return platform_results
+    
+    async def get_user_draft_reviews(self, user_id: str, platforms: Optional[List[Union[str, Platform]]] = None,
+                                   limit: Optional[int] = None) -> Dict[str, List[UnifiedReview]]:
+        """사용자의 답글 대기 리뷰 조회 (멀티플랫폼)"""
+        
+        if platforms is None:
+            platforms = list(Platform)
+        else:
+            platforms = parse_platform_list(platforms)
+        
+        print(f"[SEARCH] 사용자 {user_id[:8]}... 답글 대기 리뷰 조회")
+        
+        draft_reviews = self.platform_manager.get_draft_reviews_by_user(
+            user_id, platforms, limit
+        )
+        
+        # 결과 출력
+        total_drafts = sum(len(reviews) for reviews in draft_reviews.values())
+        print(f"   총 {total_drafts}개 답글 대기 리뷰 발견")
+        
+        for platform, reviews in draft_reviews.items():
+            if reviews:
+                print(f"   - {platform.value.upper()}: {len(reviews)}개")
+        
+        return draft_reviews
+    
+    def _print_multiplatform_summary(self, platform_results: Dict[str, BatchSummary], user_id: str):
+        """멀티플랫폼 처리 결과 요약 출력"""
+        
+        print(f"\n{'='*80}")
+        print(f"[RESULTS] 사용자 {user_id[:8]}... 멀티플랫폼 처리 결과")
+        print(f"{'='*80}")
+        
+        total_reviews = sum(s.total_reviews for s in platform_results.values())
+        total_success = sum(s.success for s in platform_results.values())
+        total_failed = sum(s.failed for s in platform_results.values())
+        total_approval = sum(s.requires_approval for s in platform_results.values())
+        
+        print(f"[TOTAL] 총 리뷰: {total_reviews}개")
+        print(f"[OK] 처리 성공: {total_success}개")
+        print(f"[ERROR] 처리 실패: {total_failed}개") 
+        print(f"[PENDING] 승인 대기: {total_approval}개")
+        print(f"\n플랫폼별 상세:")
+        
+        for platform, summary in platform_results.items():
+            if summary.total_reviews > 0:
+                print(f"  [PLATFORM] {platform.upper()}: {summary.total_reviews}개 리뷰, {summary.success}개 성공")
+        
+        if total_approval > 0:
+            print(f"\n⚠️  총 {total_approval}개 리뷰가 사장님 승인을 기다리고 있습니다!")
+    
+    async def _get_user_stores(self, user_id: str, platform: str) -> List[Dict]:
+        """사용자의 특정 플랫폼 매장 조회"""
+        
+        response = self.supabase.table('platform_stores')\
+            .select('id, store_name, platform, is_active')\
+            .eq('user_id', user_id)\
+            .eq('platform', platform)\
+            .eq('is_active', True)\
+            .execute()
+        
+        return response.data or []
+
+    # ===== 5. 배치 처리 기능 =====
     
     async def process_store_reviews(self, store_id: str, platform: str = 'naver', limit: Optional[int] = None) -> BatchSummary:
         """특정 매장의 미답변 리뷰 처리"""
@@ -919,25 +1074,39 @@ class AIReplyManager:
             await asyncio.sleep(self.rate_limit_delay)
             return await self._process_single_review(review, store_settings, platform)
     
-    async def _process_single_review(self, review: Dict, store_settings: Dict, platform: str = 'naver') -> ProcessingResult:
+    async def _process_single_review(self, review: Union[Dict, UnifiedReview], store_settings: Dict, platform: str = 'naver') -> ProcessingResult:
         """단일 리뷰 처리"""
         
-        review_id = review['id']
+        # UnifiedReview 객체를 Dict로 변환 (호환성을 위해)
+        if isinstance(review, UnifiedReview):
+            review_dict = {
+                'id': review.id,
+                'reviewer_name': review.reviewer_name,
+                'rating': review.rating,
+                'review_text': review.review_text,
+                'review_date': review.review_date,
+                'reply_status': review.reply_status,
+                'platform_store_id': review.platform_store_id
+            }
+            review_id = review.id
+        else:
+            review_dict = review
+            review_id = review['id']
         
         try:
             # 1. AI 답글 생성
-            result = await self.generate_reply(review, store_settings)
+            result = await self.generate_reply(review_dict, store_settings)
             
             # 2. 리뷰 분석 정보 추출
-            analysis = await self.analyze_review(review, store_settings)
+            analysis = await self.analyze_review(review_dict, store_settings)
             
             # 3. 답글 상태 결정
-            reply_status = self._determine_reply_status(analysis, store_settings)
+            reply_status = self._determine_reply_status(analysis, store_settings, platform)
             
             # 4. 데이터베이스 업데이트
             await self._update_review_with_reply(review_id, result, analysis, reply_status, platform)
             
-            print(f"✅ 리뷰 {review_id[:8]} ({platform}): {reply_status} ({analysis.risk_level})")
+            print(f"[OK] 리뷰 {review_id[:8]} ({platform}): {reply_status} ({analysis.risk_level})")
             
             return ProcessingResult(
                 review_id=review_id,
@@ -947,14 +1116,14 @@ class AIReplyManager:
             )
             
         except Exception as e:
-            print(f"❌ 리뷰 {review_id[:8]} ({platform}) 처리 실패: {str(e)}")
+            print(f"[ERROR] 리뷰 {review_id[:8]} ({platform}) 처리 실패: {str(e)}")
             return ProcessingResult(
                 review_id=review_id,
                 status="failed",
                 error_message=str(e)
             )
     
-    def _determine_reply_status(self, analysis: ReviewAnalysis, store_settings: Dict) -> str:
+    def _determine_reply_status(self, analysis: ReviewAnalysis, store_settings: Dict, platform: str = 'naver') -> str:
         """답글 상태 결정"""
         
         if analysis.risk_level == "high_risk":
@@ -963,8 +1132,9 @@ class AIReplyManager:
         if analysis.requires_approval:
             return "draft"  # 승인 필요한 경우 대기
         
-        # 자동 승인 가능한 경우
-        if analysis.sentiment == "positive" and store_settings.get('auto_approve_positive', False):
+        # 자동 승인 가능한 경우 (Naver만 approved 상태를 지원)
+        if (platform == 'naver' and analysis.sentiment == "positive" and 
+            store_settings.get('auto_approve_positive', False)):
             return "approved"
         
         return "draft"  # 기본값
@@ -975,25 +1145,29 @@ class AIReplyManager:
         
         table_name = self._get_table_name(platform)
         
+        # 기본 업데이트 데이터
         update_data = {
-            # AI 분석 결과
-            'sentiment': analysis.sentiment,
-            'sentiment_score': analysis.sentiment_score,
-            'extracted_keywords': analysis.keywords,
-            
-            # AI 답글 정보
-            'ai_generated_reply': result.ai_generated_reply,
-            'ai_model_used': result.ai_model_used,
-            'ai_generation_time_ms': result.ai_generation_time_ms,
-            'ai_confidence_score': result.ai_confidence_score,
-            
-            # 답글 상태
             'reply_status': reply_status,
-            'requires_approval': analysis.requires_approval,
-            
-            # 메타데이터 업데이트
             'updated_at': datetime.now().isoformat()
         }
+        
+        # Naver 플랫폼만 AI 관련 컬럼들이 있음
+        if platform == 'naver':
+            update_data.update({
+                # AI 분석 결과
+                'sentiment': analysis.sentiment,
+                'sentiment_score': analysis.sentiment_score,
+                'extracted_keywords': analysis.keywords,
+                
+                # AI 답글 정보
+                'ai_generated_reply': result.ai_generated_reply,
+                'ai_model_used': result.ai_model_used,
+                'ai_generation_time_ms': result.ai_generation_time_ms,
+                'ai_confidence_score': result.ai_confidence_score,
+                
+                # 승인 정보
+                'requires_approval': analysis.requires_approval,
+            })
         
         # 자동 승인된 경우 답글 텍스트도 저장
         if reply_status == "approved":
@@ -1016,12 +1190,16 @@ class AIReplyManager:
         
         table_name = self._get_table_name(platform)
         
+        # 기본 쿼리
         query = self.supabase.table(table_name)\
             .select('*')\
             .eq('platform_store_id', store_id)\
             .eq('reply_status', 'draft')\
-            .is_('ai_generated_reply', 'null')\
             .order('review_date', desc=False)  # 오래된 리뷰부터
+        
+        # Naver 플랫폼만 ai_generated_reply 컬럼이 있음
+        if platform == 'naver':
+            query = query.is_('ai_generated_reply', 'null')
         
         if limit:
             query = query.limit(limit)
@@ -1076,20 +1254,20 @@ class AIReplyManager:
         """처리 결과 요약 출력"""
         
         print(f"\n{'='*60}")
-        print(f"📊 [{store_name}] 처리 결과 요약")
+        print(f"[RESULTS] [{store_name}] 처리 결과 요약")
         print(f"{'='*60}")
-        print(f"📝 총 리뷰: {summary.total_reviews}개")
-        print(f"✅ 성공: {summary.success}개")
-        print(f"❌ 실패: {summary.failed}개")
-        print(f"⏭️ 건너뜀: {summary.skipped}개")
-        print(f"🚨 고위험: {summary.high_risk}개")
-        print(f"⏳ 승인 대기: {summary.requires_approval}개")
-        print(f"🔄 자동 승인: {summary.auto_approved}개")
-        print(f"⏱️ 처리 시간: {summary.processing_time_seconds:.1f}초")
+        print(f"[TOTAL] 총 리뷰: {summary.total_reviews}개")
+        print(f"[OK] 성공: {summary.success}개")
+        print(f"[ERROR] 실패: {summary.failed}개")
+        print(f"[SKIP] 건너뜀: {summary.skipped}개")
+        print(f"[HIGH] 고위험: {summary.high_risk}개")
+        print(f"[PENDING] 승인 대기: {summary.requires_approval}개")
+        print(f"[AUTO] 자동 승인: {summary.auto_approved}개")
+        print(f"[TIME] 처리 시간: {summary.processing_time_seconds:.1f}초")
         
         if summary.success > 0:
             avg_time = summary.processing_time_seconds / summary.success
-            print(f"📈 평균 처리 시간: {avg_time:.1f}초/리뷰")
+            print(f"[AVG] 평균 처리 시간: {avg_time:.1f}초/리뷰")
     
     def _print_overall_summary(self, results: Dict[str, BatchSummary]):
         """전체 처리 결과 요약"""
@@ -1100,12 +1278,12 @@ class AIReplyManager:
         total_requires_approval = sum(s.requires_approval for s in results.values())
         
         print(f"\n{'='*80}")
-        print(f"🏪 전체 매장 처리 결과")
+        print(f"[STORES] 전체 매장 처리 결과")
         print(f"{'='*80}")
-        print(f"🏪 처리 매장: {total_stores}개")
-        print(f"📝 총 리뷰: {total_reviews}개")
-        print(f"✅ 성공: {total_success}개")
-        print(f"⏳ 승인 필요: {total_requires_approval}개")
+        print(f"[STORES] 처리 매장: {total_stores}개")
+        print(f"[TOTAL] 총 리뷰: {total_reviews}개")
+        print(f"[OK] 성공: {total_success}개")
+        print(f"[PENDING] 승인 필요: {total_requires_approval}개")
         
         if total_requires_approval > 0:
             print(f"\n⚠️  {total_requires_approval}개 리뷰가 사장님 승인을 기다리고 있습니다!")
@@ -1148,11 +1326,11 @@ class AIReplyManager:
             if not response.data:
                 raise Exception("데이터베이스 업데이트 실패")
             
-            print(f"✅ 리뷰 {review_id[:8]} ({platform}) 승인 완료")
+            print(f"[OK] 리뷰 {review_id[:8]} ({platform}) 승인 완료")
             return True
             
         except Exception as e:
-            print(f"❌ 승인 실패: {str(e)}")
+            print(f"[ERROR] 승인 실패: {str(e)}")
             return False
     
     async def reject_reply(self, review_id: str, user_id: str, platform: str = 'naver',
@@ -1185,11 +1363,11 @@ class AIReplyManager:
             if not response.data:
                 raise Exception("데이터베이스 업데이트 실패")
             
-            print(f"❌ 리뷰 {review_id[:8]} ({platform}) 거부 완료")
+            print(f"[OK] 리뷰 {review_id[:8]} ({platform}) 거부 완료")
             return True
             
         except Exception as e:
-            print(f"❌ 거부 실패: {str(e)}")
+            print(f"[ERROR] 거부 실패: {str(e)}")
             return False
     
     async def edit_and_approve_reply(self, review_id: str, user_id: str, 
@@ -1223,11 +1401,11 @@ class AIReplyManager:
             if not response.data:
                 raise Exception("데이터베이스 업데이트 실패")
             
-            print(f"✏️ 리뷰 {review_id[:8]} 수정 후 승인 완료")
+            print(f"[EDIT] 리뷰 {review_id[:8]} 수정 후 승인 완료")
             return True
             
         except Exception as e:
-            print(f"❌ 수정 실패: {str(e)}")
+            print(f"[ERROR] 수정 실패: {str(e)}")
             return False
     
     async def get_pending_approvals(self, user_id: str, store_id: Optional[str] = None) -> List[Dict]:
@@ -1309,11 +1487,11 @@ class AIReplyManager:
             for review_id in review_ids:
                 await self.approve_reply(review_id, 'system', '긍정 리뷰 자동 승인')
             
-            print(f"✅ 긍정 리뷰 {len(review_ids)}개 자동 승인 완료")
+            print(f"[OK] 긍정 리뷰 {len(review_ids)}개 자동 승인 완료")
             return len(review_ids)
             
         except Exception as e:
-            print(f"❌ 자동 승인 실패: {str(e)}")
+            print(f"[ERROR] 자동 승인 실패: {str(e)}")
             return 0
     
     async def _get_review(self, review_id: str, platform: str = 'naver') -> Optional[Dict]:
@@ -1379,7 +1557,7 @@ async def main():
             "seo_keywords": ["카페", "맛집"]
         }
         
-        print("🤖 AI 답글 생성 테스트")
+        print("[AI] AI 답글 생성 테스트")
         print("="*50)
         
         # 1. 리뷰 분석
