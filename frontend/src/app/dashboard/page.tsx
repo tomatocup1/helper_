@@ -21,65 +21,40 @@ import {
   ArrowDown
 } from 'lucide-react'
 
-// Mock data - 실제 구현 시 API에서 가져올 데이터
-const mockDashboardData = {
+// 대시보드 데이터 인터페이스
+interface DashboardData {
   overview: {
-    total_stores: 2,
-    total_reviews: 156,
-    average_rating: 4.3,
-    reply_rate: 85.5,
-    new_reviews_today: 5,
-    pending_replies: 3
-  },
-  recent_reviews: [
-    {
-      id: '1',
-      store_name: '홍대 맛집 카페',
-      reviewer_name: '김고객',
-      rating: 5,
-      content: '정말 맛있었어요! 직원분들도 친절하시고 분위기도 좋네요.',
-      sentiment: 'positive',
-      reply_status: 'replied',
-      created_at: '2024-08-13T14:30:00Z'
-    },
-    {
-      id: '2',
-      store_name: '강남 헤어샵',
-      reviewer_name: '이고객',
-      rating: 2,
-      content: '서비스가 좀 아쉬웠어요. 예약 시간을 지키지 않았습니다.',
-      sentiment: 'negative',
-      reply_status: 'pending',
-      created_at: '2024-08-13T10:15:00Z'
-    },
-    {
-      id: '3',
-      store_name: '홍대 맛집 카페',
-      reviewer_name: '박고객',
-      rating: 4,
-      content: '커피가 맛있어요. 다만 좀 시끄러워서 공부하기는 어려울 것 같아요.',
-      sentiment: 'neutral',
-      reply_status: 'generated',
-      created_at: '2024-08-13T09:20:00Z'
-    }
-  ],
-  alerts: [
-    {
-      type: 'warning',
-      message: '강남 헤어샵에 부정적 리뷰가 있습니다.',
-      action: '확인 필요'
-    },
-    {
-      type: 'info',
-      message: '이번 주 리뷰 수가 20% 증가했습니다.',
-      action: '리포트 보기'
-    }
-  ]
+    total_stores: number
+    active_stores: number
+    total_reviews: number
+    average_rating: number
+    reply_rate: number
+    new_reviews_today: number
+    pending_replies: number
+  }
+  recent_reviews: Array<{
+    id: string
+    platform: string
+    store_name: string
+    reviewer_name: string
+    rating: number
+    review_text: string
+    sentiment: string
+    reply_status: string
+    review_date: string
+  }>
+  alerts: Array<{
+    type: string
+    message: string
+    action: string
+  }>
 }
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const [data, setData] = useState(mockDashboardData)
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   
   // 개발 모드용 임시 사용자 데이터
   const displayUser = user || {
@@ -87,10 +62,88 @@ export default function DashboardPage() {
     subscription_plan: 'free'
   }
 
-  // 실제 구현 시 API 호출
+  // 대시보드 데이터 가져오기
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001'
+      const response = await fetch(`${backendUrl}/api/v1/dashboard/stats`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        setData(result.data)
+      } else {
+        throw new Error(result.error || '데이터를 불러올 수 없습니다')
+      }
+    } catch (err) {
+      console.error('Dashboard data fetch error:', err)
+      setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다')
+      
+      // 오류 시 기본 데이터 설정
+      setData({
+        overview: {
+          total_stores: 0,
+          active_stores: 0,
+          total_reviews: 0,
+          average_rating: 0,
+          reply_rate: 0,
+          new_reviews_today: 0,
+          pending_replies: 0
+        },
+        recent_reviews: [],
+        alerts: [{
+          type: 'warning',
+          message: '데이터를 불러오는 중 문제가 발생했습니다.',
+          action: '새로고침'
+        }]
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    // fetchDashboardData()
+    fetchDashboardData()
+    
+    // 30초마다 데이터 새로고침
+    const interval = setInterval(fetchDashboardData, 30000)
+    return () => clearInterval(interval)
   }, [])
+
+  // 로딩 상태
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto"></div>
+            <p className="text-gray-600">대시보드 데이터를 불러오는 중...</p>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  // 데이터가 없는 경우
+  if (!data) {
+    return (
+      <AppLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="text-gray-600">데이터를 불러올 수 없습니다.</p>
+            <Button onClick={fetchDashboardData}>다시 시도</Button>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString)
@@ -131,9 +184,9 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex space-x-3">
-          <Button variant="outline">
+          <Button variant="outline" onClick={fetchDashboardData} disabled={loading}>
             <BarChart3 className="w-4 h-4 mr-2" />
-            리포트 보기
+            {loading ? '새로고침 중...' : '새로고침'}
           </Button>
           <Button variant="brand" asChild>
             <Link href="/stores/add">
@@ -216,47 +269,59 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {data.recent_reviews.map((review) => (
-                  <div key={review.id} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className="font-medium text-sm">{review.store_name}</span>
-                          <span className="text-gray-500">·</span>
-                          <span className="text-gray-500 text-sm">{review.reviewer_name}</span>
-                          <div className="flex items-center">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`w-3 h-3 ${
-                                  i < review.rating
-                                    ? 'fill-yellow-400 text-yellow-400'
-                                    : 'text-gray-300'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-700">{review.content}</p>
-                      </div>
-                      <div className="flex items-center space-x-2 ml-4">
-                        <span className={`text-xs px-2 py-1 rounded-full ${getSentimentColor(review.sentiment)}`}>
-                          {review.sentiment === 'positive' ? '긍정' : 
-                           review.sentiment === 'negative' ? '부정' : '중립'}
-                        </span>
-                        {getReplyStatusIcon(review.reply_status)}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>{formatTime(review.created_at)}</span>
-                      <span>
-                        {review.reply_status === 'replied' ? '답글 완료' :
-                         review.reply_status === 'generated' ? 'AI 답글 생성됨' :
-                         '답글 대기 중'}
-                      </span>
-                    </div>
+                {data.recent_reviews.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>아직 리뷰가 없습니다</p>
+                    <p className="text-sm">매장을 연결하고 리뷰를 수집해보세요</p>
                   </div>
-                ))}
+                ) : (
+                  data.recent_reviews.map((review) => (
+                    <div key={review.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className="font-medium text-sm">{review.store_name}</span>
+                            <span className="text-gray-500">·</span>
+                            <span className="text-gray-500 text-sm">{review.reviewer_name}</span>
+                            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded">
+                              {review.platform.toUpperCase()}
+                            </span>
+                            <div className="flex items-center">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`w-3 h-3 ${
+                                    i < review.rating
+                                      ? 'fill-yellow-400 text-yellow-400'
+                                      : 'text-gray-300'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-700">{review.review_text}</p>
+                        </div>
+                        <div className="flex items-center space-x-2 ml-4">
+                          <span className={`text-xs px-2 py-1 rounded-full ${getSentimentColor(review.sentiment)}`}>
+                            {review.sentiment === 'positive' ? '긍정' : 
+                             review.sentiment === 'negative' ? '부정' : '중립'}
+                          </span>
+                          {getReplyStatusIcon(review.reply_status)}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>{formatTime(review.review_date)}</span>
+                        <span>
+                          {review.reply_status === 'sent' || review.reply_status === 'replied' ? '답글 완료' :
+                           review.reply_status === 'approved' ? 'AI 답글 승인됨' :
+                           review.reply_status === 'pending_approval' ? '답글 승인 대기' :
+                           '답글 대기 중'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

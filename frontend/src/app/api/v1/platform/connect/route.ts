@@ -208,24 +208,29 @@ async function getMockStoreData(platform: string): Promise<CrawlerResult> {
 // 네이버 크롤러 실행
 async function runNaverCrawler(platform_id: string, platform_password: string): Promise<CrawlerResult> {
   return new Promise((resolve) => {
-    // 브라우저 프로필 기반 네이버 크롤러 사용 (2FA 우회)
-    const crawlerPath = 'C:\\helper\\store-helper-project\\backend\\scripts\\naver_crawler_persistent.py'
-    const workingDir = 'C:\\helper\\store-helper-project\\backend\\scripts'
+    // 네이버 자동 로그인 시스템 사용 (2FA 우회)
+    const crawlerPath = 'C:\\helper_B\\backend\\core\\naver_login_auto.py'
+    const workingDir = 'C:\\helper_B\\backend\\core'
     
     console.log(`Starting Python crawler with path: ${crawlerPath}`)
     console.log(`Platform ID: ${platform_id}`)
     console.log(`Working directory: ${workingDir}`)
     
-    // Python 스크립트 실행
+    // Python 스크립트 실행 (headless 모드 해제, 매장 크롤링 활성화)
     const pythonProcess = spawn('python', [
       crawlerPath,
       '--email', platform_id,
       '--password', platform_password,
-      '--mode', 'api'
+      '--crawl-stores'  // 매장 크롤링 활성화
     ], {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: true,
-      cwd: workingDir
+      cwd: workingDir,
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
     })
 
     let stdout = ''
@@ -253,27 +258,54 @@ async function runNaverCrawler(platform_id: string, platform_password: string): 
           cleanOutput = cleanOutput.slice(1)
         }
         
-        // 콘솔 출력과 JSON을 분리 - JSON은 보통 마지막 {}로 묶여있음
-        const lines = cleanOutput.split('\n')
-        let jsonStartIndex = -1
-        let braceCount = 0
+        // Windows에서 한글 깨짐 문제 해결을 위한 추가 처리
+        cleanOutput = cleanOutput.replace(/\ufffd/g, '') // replacement character 제거
         
-        // JSON의 시작을 찾기 (첫 번째 '{')
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim()
-          if (line.startsWith('{')) {
-            jsonStartIndex = i
-            break
+        // naver_login_auto.py는 LOGIN_RESULT_B64: 또는 LOGIN_RESULT: 형식으로 출력
+        let jsonString = ''
+        
+        // Base64 인코딩된 결과 먼저 확인 (한글 깨짐 방지)
+        const base64ResultMatch = cleanOutput.match(/LOGIN_RESULT_B64:(.+)/)
+        if (base64ResultMatch) {
+          try {
+            const base64String = base64ResultMatch[1].trim()
+            const decodedString = Buffer.from(base64String, 'base64').toString('utf8')
+            jsonString = decodedString
+            console.log('Base64 디코딩 성공:', jsonString.substring(0, 200) + '...')
+          } catch (decodeError) {
+            console.log('Base64 디코딩 실패, 일반 결과 시도')
           }
         }
         
-        if (jsonStartIndex === -1) {
-          throw new Error("JSON output not found in crawler response")
+        // Base64가 없거나 실패한 경우 일반 결과 시도
+        if (!jsonString) {
+          const loginResultMatch = cleanOutput.match(/LOGIN_RESULT:(.+)/)
+          if (loginResultMatch) {
+            jsonString = loginResultMatch[1].trim()
+          }
         }
         
-        // JSON 부분만 추출
-        const jsonLines = lines.slice(jsonStartIndex)
-        const jsonString = jsonLines.join('\n').trim()
+        // 일반 JSON도 없는 경우 기본 파싱
+        if (!jsonString) {
+          // 기본 JSON 형식 찾기
+          const lines = cleanOutput.split('\n')
+          let jsonStartIndex = -1
+          
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim()
+            if (line.startsWith('{')) {
+              jsonStartIndex = i
+              break
+            }
+          }
+          
+          if (jsonStartIndex === -1) {
+            throw new Error("JSON output not found in crawler response")
+          }
+          
+          const jsonLines = lines.slice(jsonStartIndex)
+          jsonString = jsonLines.join('\n').trim()
+        }
         
         console.log(`Attempting to parse JSON: ${jsonString.substring(0, 200)}...`)
         
@@ -281,17 +313,40 @@ async function runNaverCrawler(platform_id: string, platform_password: string): 
         const result = JSON.parse(jsonString)
         
         if (result.success) {
-          console.log(`Crawler success: Found ${result.stores?.length || 0} stores`)
-          resolve({
-            success: true,
-            stores: result.stores || []
-          })
+          console.log(`Naver login successful`)
+          
+          // 실제 매장 데이터가 있는지 확인
+          if (result.stores && result.stores.stores && Array.isArray(result.stores.stores)) {
+            // naver_login_auto.py에서 크롤링한 실제 매장 데이터 사용
+            const actualStores = result.stores.stores.map((store: any, index: number) => ({
+              name: store.store_name || '매장명 없음',
+              platform_store_id: store.platform_store_code || `naver_${Date.now()}_${index}`,
+              platform_url: store.url || 'https://new.smartplace.naver.com/',
+              additional_info: {
+                crawled_at: store.crawled_at,
+                platform: store.platform
+              }
+            }))
+            
+            console.log(`Found ${actualStores.length} real Naver stores`)
+            resolve({
+              success: true,
+              stores: actualStores
+            })
+          } else {
+            // 매장 데이터가 없는 경우 빈 배열 반환
+            console.log(`Naver login successful but no stores found`)
+            resolve({
+              success: true,
+              stores: []
+            })
+          }
         } else {
-          console.log(`Crawler failed: ${result.error}`)
+          console.log(`Naver login failed: ${result.error}`)
           resolve({
             success: false,
             stores: [],
-            error: result.error || `Crawler failed with code ${code}`
+            error: result.error || `Login failed with code ${code}`
           })
         }
       } catch (parseError) {
@@ -401,8 +456,10 @@ async function runBaeminCrawler(platform_id: string, platform_password: string, 
           name: '배민 테스트 매장 1',
           platform_store_id: 'bm_' + Date.now(),
           platform_url: 'https://self.baemin.com/',
-          business_type: '음식점',
-          sub_type: '[음식배달]'
+          additional_info: {
+            business_type: '음식점',
+            sub_type: '[음식배달]'
+          }
         }
       ]
     }

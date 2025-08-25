@@ -123,12 +123,11 @@ export default function NaverAnalyticsPage() {
   const fetchStores = async () => {
     try {
       console.log('User object:', user)
-      console.log('Access token:', user?.access_token)
       
       // Supabase 클라이언트에서 직접 access_token 가져오기
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      const accessToken = session?.access_token || user?.access_token || user?.id
+      const accessToken = session?.access_token || user?.id
       
       console.log('Session access token:', session?.access_token)
       console.log('Final token used:', accessToken)
@@ -164,7 +163,7 @@ export default function NaverAnalyticsPage() {
       // Supabase 클라이언트에서 직접 access_token 가져오기
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      const accessToken = session?.access_token || user?.access_token || user?.id
+      const accessToken = session?.access_token || user?.id
       
       const params = new URLSearchParams({
         store_id: selectedStore,
@@ -205,7 +204,7 @@ export default function NaverAnalyticsPage() {
       // Supabase 클라이언트에서 직접 access_token 가져오기
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      const accessToken = session?.access_token || user?.access_token || user?.id
+      const accessToken = session?.access_token || user?.id
       
       const store = stores.find(s => s.id === selectedStore)
       

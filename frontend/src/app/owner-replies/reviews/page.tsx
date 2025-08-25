@@ -110,7 +110,7 @@ export default function ReviewsPage() {
 
       // 백엔드 API 호출하여 모든 플랫폼의 리뷰 가져오기
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001'
-      let apiUrl = `${backendUrl}/api/v1/reviews?limit=500`
+      let apiUrl = `${backendUrl}/api/v1/reviews?limit=500&user_id=${user.id}`
       
       // 매장 필터 적용
       if (selectedStore !== 'all') {
@@ -315,7 +315,7 @@ export default function ReviewsPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">리뷰 관리</h1>
           <p className="text-gray-600 mt-1">
-            네이버 플레이스 리뷰를 관리하고 답글을 작성하세요.
+            모든 플랫폼의 리뷰를 관리하고 답글을 작성하세요. (네이버, 쿠팡잇츠)
           </p>
         </div>
         <div className="flex space-x-3">
@@ -579,13 +579,13 @@ export default function ReviewsPage() {
                           ))}
                         </div>
                         {/* 요기요 세부 별점 표시 */}
-                        {(review.taste_rating || review.quantity_rating) && (
+                        {((review as any).taste_rating || (review as any).quantity_rating) && (
                           <div className="flex items-center space-x-2 text-xs text-gray-600">
-                            {review.taste_rating && (
-                              <span>맛 {review.taste_rating}★</span>
+                            {(review as any).taste_rating && (
+                              <span>맛 {(review as any).taste_rating}★</span>
                             )}
-                            {review.quantity_rating && (
-                              <span>양 {review.quantity_rating}★</span>
+                            {(review as any).quantity_rating && (
+                              <span>양 {(review as any).quantity_rating}★</span>
                             )}
                           </div>
                         )}
@@ -600,9 +600,9 @@ export default function ReviewsPage() {
                           </div>
                         )}
                         {/* 플랫폼 표시 */}
-                        {review.platform && (
+                        {(review as any).platform && (
                           <Badge variant="outline" className="text-xs capitalize">
-                            {review.platform}
+                            {(review as any).platform}
                           </Badge>
                         )}
                       </div>
@@ -628,10 +628,10 @@ export default function ReviewsPage() {
                     <p className="text-gray-800 whitespace-pre-wrap">{review.review_text || '내용 없음'}</p>
                     
                     {/* 요기요 주문 메뉴 표시 */}
-                    {review.order_menu && (
+                    {(review as any).order_menu && (
                       <div className="mt-3 p-2 bg-blue-50 rounded border-l-4 border-blue-400">
                         <p className="text-xs text-blue-700 font-medium">주문 메뉴</p>
-                        <p className="text-xs text-blue-800 mt-1">{review.order_menu}</p>
+                        <p className="text-xs text-blue-800 mt-1">{(review as any).order_menu}</p>
                       </div>
                     )}
                     

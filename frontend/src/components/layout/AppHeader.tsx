@@ -51,15 +51,23 @@ const navigationItems = [
     description: '매장 정보 및 설정'
   },
   {
-    title: '리뷰 관리',
-    href: '/reviews',
+    title: '사장님 답글',
+    href: '/owner-replies',
     icon: MessageSquare,
-    description: '리뷰 및 답글 관리',
+    description: '사장님 답글 관리 및 설정',
     children: [
-      { title: '리뷰 모아보기', href: '/reviews', description: '모든 리뷰 및 답글 현황' },
-      { title: '리뷰 초안 설정', href: '/reviews/draft-settings', description: '고객 리뷰 초안 작성 설정' },
-      { title: '리뷰 초안 현황', href: '/reviews/draft-status', description: '생성된 초안 현황 관리' },
-      { title: '답글 설정', href: '/reviews/reply-settings', description: '사장님 답글 자동화 설정' }
+      { title: '사장님 답글 설정', href: '/owner-replies/settings', description: '사장님 답글 자동화 설정' },
+      { title: '리뷰 모아보기', href: '/owner-replies/reviews', description: '모든 리뷰 및 답글 현황' }
+    ]
+  },
+  {
+    title: '고객 리뷰',
+    href: '/customer-reviews',
+    icon: MessageSquare,
+    description: '고객 리뷰 관리 및 초안 설정',
+    children: [
+      { title: '고객 리뷰 초안 설정', href: '/customer-reviews/draft-settings', description: '고객 리뷰 초안 작성 설정' },
+      { title: '고객 리뷰 보기', href: '/customer-reviews/view', description: '고객 리뷰 및 초안 현황' }
     ]
   },
   {
@@ -71,12 +79,6 @@ const navigationItems = [
       { title: '전체 통계', href: '/analytics', description: '종합 매출 및 리뷰 분석' },
       { title: '네이버 통계', href: '/analytics/naver', description: '네이버 스마트플레이스 통계' }
     ]
-  },
-  {
-    title: '크롤링 모니터링',
-    href: '/crawling/monitor',
-    icon: Activity,
-    description: '자동 크롤링 상태 및 로그'
   }
 ]
 

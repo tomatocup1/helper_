@@ -1,20 +1,43 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 네이버 자동 로그인 시스템
 - 브라우저 프로필 기반 persistent context 사용
 - 기기 등록 자동화 및 2차 인증 우회
 - 계정별 세션 관리 및 재사용
+- 네이버 스마트플레이스 매장 크롤링 기능
 """
 
 import os
 import sys
 import json
+import locale
+import base64
+
+# UTF-8 인코딩 강제 설정
+if sys.platform.startswith('win'):
+    try:
+        locale.setlocale(locale.LC_ALL, 'ko_KR.UTF-8')
+    except:
+        try:
+            locale.setlocale(locale.LC_ALL, 'Korean_Korea.949')
+        except:
+            pass
+
+# 표준 출력을 UTF-8로 재설정 (Windows 호환)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 import hashlib
 import asyncio
 import argparse
 from datetime import datetime
 from pathlib import Path
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from supabase import create_client, Client
+from typing import List, Dict, Optional
+import re
 
 # 캐차 해결 모듈 임포트
 try:
@@ -24,13 +47,20 @@ except ImportError:
     CAPTCHA_SOLVER_AVAILABLE = False
     print("캐차 해결 모듈을 사용할 수 없습니다. 기본 로그인만 시도합니다.")
 
+# Supabase 설정
+SUPABASE_URL = "https://wjghnqcgxuauwfvjvrto.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqZ2hucWNneHVhdXdmdmp2cnRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQzODAyNzAsImV4cCI6MjA0OTk1NjI3MH0.u3eLDHgqtGr3uMw5lECR5DOLLzwSxz_qUTglk4WPRPk"
+
 class NaverAutoLogin:
-    def __init__(self, headless=True, timeout=30000, force_fresh_login=False):
+    def __init__(self, headless=False, timeout=30000, force_fresh_login=False):
         self.headless = headless
         self.timeout = timeout
         self.force_fresh_login = force_fresh_login
         self.browser_data_dir = os.path.join("logs", "browser_profiles", "naver")
         os.makedirs(self.browser_data_dir, exist_ok=True)
+        
+        # Supabase 클라이언트 초기화
+        self.supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
         
         # 캐차 해결 시스템을 수동 모드로 설정
         self.captcha_solver = None
@@ -87,6 +117,58 @@ class NaverAutoLogin:
             
         except Exception as e:
             print(f"팝업 처리 중 오류: {str(e)}")
+            return False
+    
+    async def _close_store_popup(self, page) -> bool:
+        """매장 상세 페이지의 팝업 닫기"""
+        try:
+            print("매장 팝업 확인 및 닫기 처리 중...")
+            
+            # 팝업 닫기 버튼 선택자들
+            popup_close_selectors = [
+                "button.Popup_btn_close__IJnY4[data-testid='popup_close_btn']",  # 제공받은 정확한 선택자
+                ".Popup_btn_close__IJnY4",                                      # 클래스만
+                "button[data-testid='popup_close_btn']",                       # data-testid 속성
+                ".fn-booking.fn-booking-close1",                                # 아이콘 클래스
+                "i.fn-booking.fn-booking-close1",                              # 아이콘 요소
+                ".popup_close",                                                # 일반적인 팝업 닫기
+                "button[aria-label='닫기']",                                    # aria-label
+                ".slick-arrow.slick-next"                                      # 슬라이더 다음 버튼도 시도
+            ]
+            
+            for selector in popup_close_selectors:
+                try:
+                    # 팝업 요소가 있는지 확인 (짧은 타임아웃)
+                    close_button = await page.wait_for_selector(selector, timeout=2000)
+                    if close_button:
+                        # 요소가 실제로 보이는지 확인
+                        is_visible = await close_button.is_visible()
+                        if is_visible:
+                            print(f"매장 팝업 닫기 버튼 발견: {selector}")
+                            await close_button.click()
+                            await page.wait_for_timeout(1000)  # 팝업 닫힘 대기
+                            print("매장 팝업 닫기 완료")
+                            return True
+                except Exception:
+                    # 이 선택자로는 팝업을 찾지 못함, 다음 시도
+                    continue
+            
+            # 팝업이 전체적으로 있는지 확인하고 ESC 키로 닫기 시도
+            try:
+                popup_layer = await page.query_selector(".Popup_popup_layer__s3bKq")
+                if popup_layer:
+                    print("팝업 레이어 감지, ESC 키로 닫기 시도")
+                    await page.keyboard.press('Escape')
+                    await page.wait_for_timeout(1000)
+                    return True
+            except Exception:
+                pass
+                
+            print("매장 팝업이 없거나 이미 닫혀있음")
+            return False
+            
+        except Exception as e:
+            print(f"매장 팝업 처리 중 오류: {str(e)}")
             return False
     
     async def _setup_browser_context(self, profile_path: str):
@@ -151,7 +233,7 @@ class NaverAutoLogin:
         
         return browser, p
     
-    async def login(self, platform_id: str, platform_password: str, keep_browser_open: bool = False) -> dict:
+    async def login(self, platform_id: str, platform_password: str, keep_browser_open: bool = False, crawl_stores: bool = True) -> dict:
         """네이버 로그인 실행"""
         profile_path = self._get_browser_profile_path(platform_id)
         browser = None
@@ -249,6 +331,17 @@ class NaverAutoLogin:
             
             # 로그인 결과 대기 및 처리
             result = await self._handle_login_result(page, platform_id, profile_path, has_existing_session)
+            
+            # 로그인 성공 후 매장 크롤링 수행 (crawl_stores=True일 때)
+            if result['success'] and crawl_stores:
+                print("로그인 성공 - 매장 정보 크롤링 시작")
+                try:
+                    stores_result = await self.crawl_naver_stores(page)
+                    result['stores'] = stores_result
+                    print(f"매장 크롤링 완료: {len(stores_result.get('stores', []))}개 매장 발견")
+                except Exception as e:
+                    print(f"매장 크롤링 중 오류: {str(e)}")
+                    result['stores'] = {'error': str(e), 'stores': []}
             
             # 브라우저를 유지할 경우 세션 정보에 브라우저 객체 추가
             if keep_browser_open and result['success']:
@@ -685,6 +778,202 @@ class NaverAutoLogin:
                 'error': f'세션 저장 실패: {str(e)}',
                 'session_id': None
             }
+    
+    async def crawl_naver_stores(self, page) -> Dict:
+        """네이버 스마트플레이스 매장 정보 크롤링"""
+        try:
+            print("네이버 매장 크롤링 시작...")
+            
+            # 스마트플레이스 메인 페이지로 이동
+            await page.goto("https://new.smartplace.naver.com/", wait_until='networkidle', timeout=self.timeout)
+            await page.wait_for_timeout(3000)
+            
+            # 내 업체에서 업체 수만 확인 (클릭하지 않음)
+            business_count = 0
+            try:
+                # 내 업체 링크에서 업체 수만 확인
+                business_link_selector = "a.Main_title__P_c6n.Main_link__fofNg[href='/bizes']"
+                business_link = await page.wait_for_selector(business_link_selector, timeout=10000)
+                
+                if business_link:
+                    # 업체 수 추출 (클릭하지 않고 숫자만 확인)
+                    count_element = await page.query_selector("a.Main_title__P_c6n.Main_link__fofNg[href='/bizes'] span.Main_num__yfahC")
+                    if count_element:
+                        count_text = await count_element.text_content()
+                        business_count = int(count_text) if count_text and count_text.isdigit() else 0
+                        print(f"총 업체 수: {business_count}개")
+                    else:
+                        print("업체 수를 찾을 수 없습니다")
+                        business_count = 0
+                else:
+                    print("내 업체 링크를 찾을 수 없습니다")
+                    return {'success': False, 'error': '내 업체 링크를 찾을 수 없음', 'stores': []}
+                    
+            except Exception as e:
+                print(f"업체 수 확인 중 오류: {str(e)}")
+                return {'success': False, 'error': f'업체 수 확인 실패: {str(e)}', 'stores': []}
+            
+            # 매장별 크롤링 (업체 수만큼 반복)
+            stores = []
+            
+            if business_count == 0:
+                print("크롤링할 업체가 없습니다")
+                return {'success': True, 'business_count': 0, 'stores_found': 0, 'stores': []}
+            
+            try:
+                for store_index in range(business_count):
+                    print(f"\n=== 매장 {store_index + 1}/{business_count} 처리 중 ===")
+                    
+                    # 스마트플레이스 메인으로 이동
+                    await page.goto("https://new.smartplace.naver.com/", wait_until='networkidle', timeout=self.timeout)
+                    await page.wait_for_timeout(2000)
+                    
+                    # 매장 카드들 찾기
+                    store_cards = await page.query_selector_all("a.Main_business_card__Q8DjV")
+                    print(f"발견된 매장 카드 수: {len(store_cards)}개")
+                    
+                    if store_index >= len(store_cards):
+                        print(f"매장 인덱스 {store_index}가 발견된 카드 수 {len(store_cards)}를 초과합니다")
+                        break
+                    
+                    current_store_card = store_cards[store_index]
+                    
+                    # 매장 이름 추출 (클릭 전에)
+                    store_name = ""
+                    try:
+                        # strong.Main_title__P_c6n.two_line에서 매장명 추출
+                        name_element = await current_store_card.query_selector("strong.Main_title__P_c6n.two_line")
+                        if name_element:
+                            store_name = await name_element.text_content()
+                            if store_name:
+                                store_name = store_name.strip()
+                                print(f"매장명 추출: {store_name}")
+                        
+                        # 찾지 못한 경우 다른 선택자들 시도
+                        if not store_name:
+                            alternative_selectors = [
+                                ".Main_title__P_c6n",
+                                "strong",
+                                ".business_name",
+                                ".name"
+                            ]
+                            for selector in alternative_selectors:
+                                try:
+                                    alt_element = await current_store_card.query_selector(selector)
+                                    if alt_element:
+                                        store_name = await alt_element.text_content()
+                                        if store_name and store_name.strip():
+                                            store_name = store_name.strip()
+                                            print(f"대체 선택자로 매장명 추출: {store_name}")
+                                            break
+                                except:
+                                    continue
+                                    
+                    except Exception as e:
+                        print(f"매장명 추출 중 오류: {str(e)}")
+                    
+                    # 매장 카드 클릭
+                    try:
+                        await current_store_card.click()
+                        await page.wait_for_timeout(3000)
+                        print("매장 카드 클릭 완료")
+                    except Exception as e:
+                        print(f"매장 카드 클릭 중 오류: {str(e)}")
+                        continue
+                    
+                    # 팝업 처리
+                    await self._close_store_popup(page)
+                    
+                    # URL에서 platform_store_code 추출
+                    current_url = page.url
+                    print(f"매장 상세 URL: {current_url}")
+                    
+                    platform_store_code = ""
+                    match = re.search(r'/bizes/place/(\d+)', current_url)
+                    if match:
+                        platform_store_code = match.group(1)
+                        print(f"추출된 platform_store_code: {platform_store_code}")
+                    
+                    # 매장 정보 저장
+                    if platform_store_code and store_name:
+                        store_info = {
+                            'store_name': store_name,
+                            'platform_store_code': platform_store_code,
+                            'platform': 'naver',
+                            'url': current_url,
+                            'crawled_at': datetime.now().isoformat()
+                        }
+                        stores.append(store_info)
+                        print(f"매장 정보 저장: {store_name} ({platform_store_code})")
+                        
+                        # Supabase에 저장
+                        try:
+                            await self._save_store_to_supabase(store_info)
+                            print("Supabase 저장 완료")
+                        except Exception as e:
+                            print(f"Supabase 저장 중 오류: {str(e)}")
+                    else:
+                        print(f"매장 정보 불완전 - 이름: '{store_name}', 코드: '{platform_store_code}'")
+                
+            except Exception as e:
+                print(f"매장 크롤링 중 전체 오류: {str(e)}")
+                return {'success': False, 'error': f'매장 크롤링 실패: {str(e)}', 'stores': stores}
+            
+            print(f"매장 크롤링 완료: {len(stores)}개 매장")
+            return {
+                'success': True,
+                'business_count': business_count,
+                'stores_found': len(stores),
+                'stores': stores
+            }
+            
+        except Exception as e:
+            print(f"매장 크롤링 중 전체 오류: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'stores': []
+            }
+    
+    async def _save_store_to_supabase(self, store_info: Dict) -> bool:
+        """매장 정보를 Supabase platform_stores 테이블에 저장"""
+        try:
+            # 기존 매장이 있는지 확인
+            existing = self.supabase.table('platform_stores').select('*').eq('platform', 'naver').eq('platform_store_code', store_info['platform_store_code']).execute()
+            
+            store_data = {
+                'platform': 'naver',
+                'platform_store_code': store_info['platform_store_code'],
+                'store_name': store_info['store_name'],
+                'status': 'active',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'last_crawled_at': datetime.now().isoformat(),
+                'naver_session_active': True,
+                'naver_last_login': datetime.now().isoformat(),
+                'naver_device_registered': True
+            }
+            
+            if existing.data:
+                # 기존 매장 업데이트
+                result = self.supabase.table('platform_stores').update({
+                    'store_name': store_info['store_name'],
+                    'updated_at': datetime.now().isoformat(),
+                    'last_crawled_at': datetime.now().isoformat(),
+                    'naver_session_active': True,
+                    'naver_last_login': datetime.now().isoformat()
+                }).eq('platform', 'naver').eq('platform_store_code', store_info['platform_store_code']).execute()
+                print(f"기존 매장 업데이트: {store_info['store_name']}")
+            else:
+                # 새 매장 생성
+                result = self.supabase.table('platform_stores').insert(store_data).execute()
+                print(f"새 매장 생성: {store_info['store_name']}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"Supabase 저장 중 오류: {str(e)}")
+            return False
 
 async def main():
     parser = argparse.ArgumentParser(description='네이버 자동 로그인')
@@ -693,6 +982,7 @@ async def main():
     parser.add_argument('--headless', action='store_true', help='헤드리스 모드')
     parser.add_argument('--timeout', type=int, default=30000, help='타임아웃 (ms)')
     parser.add_argument('--force-fresh', action='store_true', help='기존 세션 무시하고 강제 새 로그인')
+    parser.add_argument('--crawl-stores', action='store_true', help='로그인 후 매장 정보 크롤링 실행')
     
     args = parser.parse_args()
     
@@ -701,10 +991,23 @@ async def main():
         timeout=args.timeout,
         force_fresh_login=args.force_fresh
     )
-    result = await login_system.login(args.email, args.password)
+    result = await login_system.login(
+        args.email, 
+        args.password, 
+        keep_browser_open=False,
+        crawl_stores=args.crawl_stores
+    )
     
-    # 결과 출력 (JSON 형태)
-    print(f"LOGIN_RESULT:{json.dumps(result, ensure_ascii=False)}")
+    # 결과 출력 - Base64 인코딩으로 한글 깨짐 방지
+    try:
+        result_json = json.dumps(result, ensure_ascii=False, indent=None)
+        # Base64로 인코딩하여 한글 깨짐 방지
+        encoded_result = base64.b64encode(result_json.encode('utf-8')).decode('ascii')
+        print(f"LOGIN_RESULT_B64:{encoded_result}", flush=True)
+    except Exception as e:
+        # 폴백: ASCII 안전 출력
+        result_json_safe = json.dumps(result, ensure_ascii=True, indent=None)
+        print(f"LOGIN_RESULT:{result_json_safe}", flush=True)
     
     return result['success']
 

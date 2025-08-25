@@ -1169,8 +1169,11 @@ class AIReplyManager:
                 'requires_approval': analysis.requires_approval,
             })
         
-        # 자동 승인된 경우 답글 텍스트도 저장
-        if reply_status == "approved":
+        # 배달 플랫폼들은 reply_text 필드에 AI 답글 저장
+        if platform in ['baemin', 'yogiyo', 'coupangeats']:
+            update_data['reply_text'] = result.complete_reply
+        # 네이버는 자동 승인된 경우에만 reply_text 저장
+        elif platform == 'naver' and reply_status == "approved":
             update_data['reply_text'] = result.complete_reply
         
         response = self.supabase.table(table_name).update(update_data).eq('id', review_id).execute()
@@ -1190,16 +1193,22 @@ class AIReplyManager:
         
         table_name = self._get_table_name(platform)
         
-        # 기본 쿼리
+        # 플랫폼별 쿼리 구성
         query = self.supabase.table(table_name)\
             .select('*')\
             .eq('platform_store_id', store_id)\
-            .eq('reply_status', 'draft')\
             .order('review_date', desc=False)  # 오래된 리뷰부터
         
-        # Naver 플랫폼만 ai_generated_reply 컬럼이 있음
+        # 플랫폼별 조건 처리
         if platform == 'naver':
-            query = query.is_('ai_generated_reply', 'null')
+            # Naver: reply_status가 'draft'이고 ai_generated_reply가 null
+            query = query.eq('reply_status', 'draft').is_('ai_generated_reply', 'null')
+        elif platform in ['baemin', 'yogiyo', 'coupangeats']:
+            # 배달 플랫폼들: reply_text가 null인 리뷰 (아직 AI 답글이 생성되지 않은 리뷰)
+            query = query.is_('reply_text', 'null')
+        else:
+            # 기본: reply_status가 'draft'
+            query = query.eq('reply_status', 'draft')
         
         if limit:
             query = query.limit(limit)
