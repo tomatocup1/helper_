@@ -52,22 +52,34 @@ const sentimentOptions = [
   { value: 'neutral', label: '중립' }
 ]
 
+const platformOptions = [
+  { value: 'all', label: '전체 플랫폼' },
+  { value: 'naver', label: '네이버' },
+  { value: 'baemin', label: '배민' },
+  { value: 'coupangeats', label: '쿠팡잇츠' },
+  { value: 'yogiyo', label: '요기요' }
+]
+
 export default function ReviewsPage() {
   const { user } = useAuth()
   const [reviews, setReviews] = useState<ReviewWithStore[]>([])
   const [filteredReviews, setFilteredReviews] = useState<ReviewWithStore[]>([])
-  const [filter, setFilter] = useState('draft')
+  const [filter, setFilter] = useState('all')
   const [sentimentFilter, setSentimentFilter] = useState('all')
+  const [platformFilter, setPlatformFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedStore, setSelectedStore] = useState<string>('all')
   const [stores, setStores] = useState<PlatformStoreRow[]>([])
 
+  // 상태 디버깅 (필요시 활성화)
+  // console.log('컴포넌트 렌더링 - filter:', filter, 'filteredReviews.length:', filteredReviews.length, 'reviews.length:', reviews.length)
+
   // Supabase 클라이언트
   const supabase = createClient()
 
-  // 매장 목록 가져오기
+  // 매장 목록 가져오기 (Supabase 직접 사용)
   const fetchStores = useCallback(async () => {
     if (!user?.id) return
 
@@ -81,33 +93,27 @@ export default function ReviewsPage() {
 
       if (error) throw error
       setStores(data || [])
+      console.log('Stores loaded:', data)
     } catch (err) {
       console.error('Error fetching stores:', err)
+      setStores([])
     }
   }, [user?.id])
 
   // 리뷰 데이터 가져오기 (백엔드 API 사용)
   const fetchReviews = useCallback(async () => {
-    if (!user?.id) return
+    // 인증된 사용자만 리뷰 조회 가능
+    if (!user?.id) {
+      console.log('사용자 인증 필요: 로그인 후 이용해주세요')
+      setReviews([])
+      setError('로그인이 필요합니다.')
+      return
+    }
 
     setIsLoading(true)
     setError(null)
 
     try {
-      // 먼저 사용자의 매장들 가져오기
-      const { data: userStores, error: storesError } = await supabase
-        .from('platform_stores')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-
-      if (storesError) throw storesError
-      if (!userStores || userStores.length === 0) {
-        setReviews([])
-        setFilteredReviews([])
-        return
-      }
-
       // 백엔드 API 호출하여 모든 플랫폼의 리뷰 가져오기
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001'
       let apiUrl = `${backendUrl}/api/v1/reviews?limit=500&user_id=${user.id}`
@@ -118,41 +124,37 @@ export default function ReviewsPage() {
       }
 
       const response = await fetch(apiUrl)
+      
       if (!response.ok) {
         throw new Error('리뷰 조회 API 호출 실패')
       }
       
       const apiResult = await response.json()
+      
       if (!apiResult.success) {
         throw new Error(apiResult.message || '리뷰 조회 실패')
       }
 
-      // 매장 정보와 연결
-      const reviewsWithStore = apiResult.reviews.map((review: any) => {
-        const matchingStore = userStores.find(store => store.id === review.platform_store_id)
+      // 데이터 구조 확인 및 처리
+      const reviewsData = apiResult.data?.reviews || apiResult.reviews || []
+
+      // 매장 정보와 연결하여 타입에 맞게 변환
+      const reviewsWithStore = reviewsData.map((review: any) => {
         return {
           ...review,
-          platform_store: matchingStore,
-          // 플랫폼별 필드명 통일 (요기요 → 네이버 형식으로)
-          rating: review.overall_rating || review.rating || 0,
+          platform_store: review.platform_stores, // 백엔드에서 온 매장 정보 사용
+          // 필드명 통일
+          rating: review.rating || 0,
           reviewer_name: review.reviewer_name || '익명',
           review_text: review.review_text || '',
           review_date: review.review_date || review.created_at,
           has_photos: review.has_photos || false,
           photo_count: review.photo_count || 0,
-          // 요기요 고유 필드들
-          taste_rating: review.taste_rating,
-          quantity_rating: review.quantity_rating,
-          order_menu: review.order_menu,
-          yogiyo_dsid: review.yogiyo_dsid
         }
-      }).filter((review: any) => 
-        // 사용자의 매장에 속하는 리뷰만 필터링
-        userStores.some(store => store.id === review.platform_store_id)
-      )
+      })
 
       setReviews(reviewsWithStore)
-      console.log(`리뷰 조회 완료: ${reviewsWithStore.length}개 (요기요 포함)`)
+      console.log(`리뷰 조회 완료: ${reviewsWithStore.length}개`)
       
     } catch (err) {
       console.error('Error fetching reviews:', err)
@@ -162,12 +164,13 @@ export default function ReviewsPage() {
     }
   }, [user?.id, selectedStore])
 
-  // 초기 데이터 로드
+  // 초기 데이터 로드 - 매장을 먼저 로드한 후 리뷰 로드
   useEffect(() => {
     fetchStores()
   }, [fetchStores])
 
   useEffect(() => {
+    // 매장 데이터가 로드된 후에 리뷰 조회
     fetchReviews()
   }, [fetchReviews])
 
@@ -194,6 +197,11 @@ export default function ReviewsPage() {
       filtered = filtered.filter(review => review.sentiment === sentimentFilter)
     }
 
+    // 플랫폼 필터
+    if (platformFilter !== 'all') {
+      filtered = filtered.filter(review => (review as any).platform === platformFilter)
+    }
+
     // 검색 필터
     if (searchTerm) {
       filtered = filtered.filter(review => 
@@ -204,7 +212,7 @@ export default function ReviewsPage() {
     }
 
     setFilteredReviews(filtered)
-  }, [reviews, filter, sentimentFilter, searchTerm])
+  }, [reviews, filter, sentimentFilter, platformFilter, searchTerm])
 
   const formatTime = (dateString: string | null) => {
     if (!dateString) return '날짜 없음'
@@ -286,6 +294,26 @@ export default function ReviewsPage() {
     }
   }
 
+  const getPlatformColor = (platform: string) => {
+    switch (platform) {
+      case 'naver': return 'bg-green-100 text-green-800'
+      case 'baemin': return 'bg-cyan-100 text-cyan-800'
+      case 'coupangeats': return 'bg-red-100 text-red-800'
+      case 'yogiyo': return 'bg-orange-100 text-orange-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getPlatformName = (platform: string) => {
+    switch (platform) {
+      case 'naver': return '네이버'
+      case 'baemin': return '배민'
+      case 'coupangeats': return '쿠팡잇츠'
+      case 'yogiyo': return '요기요'
+      default: return platform
+    }
+  }
+
   // 통계 계산 (필터 로직과 동일하게)
   const statistics = {
     total: reviews.length,
@@ -299,9 +327,13 @@ export default function ReviewsPage() {
     pending: reviews.filter(r => r.reply_status === 'pending_approval').length,
     approved: reviews.filter(r => r.reply_status === 'approved').length,
     failed: reviews.filter(r => r.reply_status === 'failed').length,
-    averageRating: reviews.length > 0 
-      ? (reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / reviews.length).toFixed(1)
-      : '0.0',
+    // 네이버 제외하고 실제 평점이 있는 리뷰만으로 평균 계산
+    averageRating: (() => {
+      const reviewsWithRating = reviews.filter(r => r.rating && r.rating > 0);
+      return reviewsWithRating.length > 0 
+        ? (reviewsWithRating.reduce((acc, r) => acc + r.rating, 0) / reviewsWithRating.length).toFixed(1)
+        : '0.0';
+    })(),
     positiveRate: reviews.length > 0
       ? Math.round((reviews.filter(r => r.sentiment === 'positive').length / reviews.length) * 100)
       : 0
@@ -315,7 +347,7 @@ export default function ReviewsPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">리뷰 관리</h1>
           <p className="text-gray-600 mt-1">
-            모든 플랫폼의 리뷰를 관리하고 답글을 작성하세요. (네이버, 쿠팡잇츠)
+            모든 플랫폼의 리뷰를 관리하고 답글을 작성하세요. (네이버, 배민, 쿠팡잇츠, 요기요)
           </p>
         </div>
         <div className="flex space-x-3">
@@ -441,7 +473,7 @@ export default function ReviewsPage() {
               <option value="all">모든 매장</option>
               {stores.map(store => (
                 <option key={store.id} value={store.id}>
-                  {store.store_name}
+                  ({store.platform}) {store.store_name}
                 </option>
               ))}
             </select>
@@ -461,6 +493,19 @@ export default function ReviewsPage() {
             </div>
 
             <div className="flex space-x-2">
+              {/* 플랫폼 필터 */}
+              <select
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                value={platformFilter}
+                onChange={(e) => setPlatformFilter(e.target.value)}
+              >
+                {platformOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
               {/* 답글 상태 필터 */}
               <select
                 className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
@@ -601,8 +646,8 @@ export default function ReviewsPage() {
                         )}
                         {/* 플랫폼 표시 */}
                         {(review as any).platform && (
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {(review as any).platform}
+                          <Badge className={`text-xs ${getPlatformColor((review as any).platform)}`}>
+                            {getPlatformName((review as any).platform)}
                           </Badge>
                         )}
                       </div>
@@ -779,9 +824,9 @@ export default function ReviewsPage() {
               {searchTerm ? '다른 검색어를 시도해보세요.' :
                filter === 'draft' ? '모든 리뷰에 대한 작업이 완료되었습니다! 🎉 답글 생성, 승인, 전송이 모두 끝났어요.' :
                filter === 'sent' ? '답글을 완료한 리뷰들을 확인하세요.' :
-               filter !== 'all' || sentimentFilter !== 'all' ? '다른 필터 조건을 시도해보세요.' :
+               filter !== 'all' || sentimentFilter !== 'all' || platformFilter !== 'all' ? '다른 필터 조건을 시도해보세요.' :
                stores.length === 0 ? '먼저 매장을 등록해주세요.' :
-               '네이버 리뷰가 수집되면 여기에 표시됩니다.'
+               '리뷰가 수집되면 여기에 표시됩니다.'
               }
             </p>
             <div className="mt-4 space-x-2">
@@ -795,13 +840,14 @@ export default function ReviewsPage() {
                   모든 리뷰 보기
                 </Button>
               )}
-              {(searchTerm || filter !== 'draft' || sentimentFilter !== 'all') && (
+              {(searchTerm || filter !== 'draft' || sentimentFilter !== 'all' || platformFilter !== 'all') && (
                 <Button 
                   variant="outline" 
                   onClick={() => {
                     setSearchTerm('')
                     setFilter('draft')
                     setSentimentFilter('all')
+                    setPlatformFilter('all')
                   }}
                 >
                   작업 필요한 리뷰 보기
