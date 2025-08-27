@@ -10,12 +10,47 @@ import os
 from pathlib import Path
 import sys
 from datetime import datetime
+from pydantic import BaseModel
+from typing import List, Optional
+from supabase import create_client, Client
 
 # Add services directory to path
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir))
 
 app = FastAPI(title="Store Platform API")
+
+# Supabase 설정
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL", "https://efcdjsrumdrhmpingglp.supabase.co")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmY2Rqc3J1bWRyaG1waW5nZ2xwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTU2Mzc0MiwiZXhwIjoyMDcxMTM5NzQyfQ.grPU1SM6Y7rYwxcAf8f_txT0h6_DmRl4G0s-cyWOGrI")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+# 답글 설정 Pydantic 모델
+class ReplySettings(BaseModel):
+    autoReplyEnabled: bool = False
+    replyTone: str = 'friendly'
+    minReplyLength: int = 50
+    maxReplyLength: int = 200
+    brandVoice: str = ""
+    greetingTemplate: str = ""
+    closingTemplate: str = ""
+    seoKeywords: List[str] = []
+    autoApprovalDelayHours: int = 48
+
+class StoreInfo(BaseModel):
+    id: str
+    store_name: str
+    platform: str
+    platform_store_id: str
+    auto_reply_enabled: bool
+    reply_tone: str
+    min_reply_length: int
+    max_reply_length: int
+    brand_voice: Optional[str]
+    greeting_template: Optional[str]
+    closing_template: Optional[str]
+    seo_keywords: List[str]
+    auto_approval_delay_hours: int
 
 # CORS 설정
 app.add_middleware(
@@ -138,6 +173,119 @@ async def connect_platform(request_data: dict):
             "platform": platform,
             "timestamp": datetime.now().isoformat()
         }
+
+# 사용자의 매장 목록 조회
+@app.get("/api/user-stores/{user_id}")
+async def get_user_stores(user_id: str):
+    """사용자의 매장 목록 조회"""
+    try:
+        response = supabase.table('platform_stores').select(
+            'id, store_name, platform, platform_store_id, auto_reply_enabled, '
+            'reply_tone, min_reply_length, max_reply_length, brand_voice, '
+            'greeting_template, closing_template, seo_keywords, negative_review_delay_hours'
+        ).eq('user_id', user_id).eq('is_active', True).execute()
+        
+        stores = []
+        for store_data in response.data:
+            stores.append({
+                "id": store_data['id'],
+                "store_name": store_data['store_name'],
+                "platform": store_data['platform'],
+                "platform_store_id": store_data['platform_store_id'],
+                "autoReplyEnabled": store_data.get('auto_reply_enabled', False),
+                "replyTone": store_data.get('reply_tone', 'friendly'),
+                "minReplyLength": store_data.get('min_reply_length', 50),
+                "maxReplyLength": store_data.get('max_reply_length', 200),
+                "brandVoice": store_data.get('brand_voice', ''),
+                "greetingTemplate": store_data.get('greeting_template', ''),
+                "closingTemplate": store_data.get('closing_template', ''),
+                "seoKeywords": store_data.get('seo_keywords', []),
+                "autoApprovalDelayHours": store_data.get('negative_review_delay_hours', 48)
+            })
+        
+        return {
+            "success": True,
+            "stores": stores,
+            "count": len(stores)
+        }
+    except Exception as e:
+        print(f"매장 목록 조회 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"매장 목록 조회 실패: {str(e)}")
+
+# 매장별 답글 설정 조회
+@app.get("/api/reply-settings/{store_id}")
+async def get_reply_settings(store_id: str):
+    """매장별 답글 설정 조회"""
+    try:
+        response = supabase.table('platform_stores').select(
+            'auto_reply_enabled, reply_tone, min_reply_length, max_reply_length, '
+            'brand_voice, greeting_template, closing_template, seo_keywords, negative_review_delay_hours'
+        ).eq('id', store_id).single().execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="매장을 찾을 수 없습니다")
+            
+        store_data = response.data
+        settings = {
+            "autoReplyEnabled": store_data.get('auto_reply_enabled', False),
+            "replyTone": store_data.get('reply_tone', 'friendly'),
+            "minReplyLength": store_data.get('min_reply_length', 50),
+            "maxReplyLength": store_data.get('max_reply_length', 200),
+            "brandVoice": store_data.get('brand_voice', ''),
+            "greetingTemplate": store_data.get('greeting_template', ''),
+            "closingTemplate": store_data.get('closing_template', ''),
+            "seoKeywords": store_data.get('seo_keywords', []),
+            "autoApprovalDelayHours": store_data.get('negative_review_delay_hours', 48)
+        }
+        
+        return {
+            "success": True,
+            "settings": settings
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"답글 설정 조회 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"답글 설정 조회 실패: {str(e)}")
+
+# 매장별 답글 설정 저장
+@app.post("/api/reply-settings/{store_id}")
+async def save_reply_settings(store_id: str, settings: dict):
+    """매장별 답글 설정 저장"""
+    print(f"[DEBUG] 저장 요청 받음 - store_id: {store_id}")
+    print(f"[DEBUG] 설정 데이터: {settings}")
+    try:
+        # 매장 존재 확인
+        store_check = supabase.table('platform_stores').select('id').eq('id', store_id).execute()
+        if not store_check.data:
+            raise HTTPException(status_code=404, detail="매장을 찾을 수 없습니다")
+        
+        # 설정 업데이트 (실제 존재하는 컬럼들 사용)
+        update_data = {
+            'auto_reply_enabled': settings.get('autoReplyEnabled', False),
+            'reply_tone': settings.get('replyTone', 'friendly'),
+            'min_reply_length': settings.get('minReplyLength', 50),
+            'max_reply_length': settings.get('maxReplyLength', 200),
+            'brand_voice': settings.get('brandVoice', ''),
+            'greeting_template': settings.get('greetingTemplate') or None,
+            'closing_template': settings.get('closingTemplate') or None,
+            'seo_keywords': settings.get('seoKeywords', []),
+            'negative_review_delay_hours': settings.get('autoApprovalDelayHours', 48),
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        response = supabase.table('platform_stores').update(update_data).eq('id', store_id).execute()
+        
+        return {
+            "success": True,
+            "message": "답글 설정이 성공적으로 저장되었습니다",
+            "store_id": store_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"답글 설정 저장 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"답글 설정 저장 실패: {str(e)}")
 
 # 리뷰 조회 엔드포인트
 @app.get("/api/v1/reviews")
@@ -477,8 +625,9 @@ async def get_dashboard_stats():
         }
 
 if __name__ == "__main__":
-    # 기본 포트는 8001, 환경변수로 변경 가능
-    port = int(os.getenv("BACKEND_PORT", 8001))
-    print(f"[서버] http://localhost:{port} 에서 시작됩니다")
-    print("[지원 플랫폼] 배달의민족, 쿠팡이츠, 요기요")
+    # 기본 포트는 8002, 환경변수로 변경 가능
+    port = int(os.getenv("BACKEND_PORT", 8002))
+    print(f"[서버] Store Platform API 서버가 포트 {port}에서 시작됩니다...")
+    print(f"[DB] Supabase URL: {SUPABASE_URL}")
+    print("[플랫폼] 배달의민족, 쿠팡이츠, 요기요")
     uvicorn.run(app, host="0.0.0.0", port=port, reload=False)

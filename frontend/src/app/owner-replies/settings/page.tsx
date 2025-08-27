@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/store/auth-store-supabase'
 import AppLayout from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   Settings, 
   Save, 
@@ -22,635 +21,579 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
-  Eye,
-  Trash2,
-  Edit3
+  Store,
+  Loader2,
+  RefreshCw
 } from 'lucide-react'
 
-interface ReplyTemplate {
+interface Store {
   id: string
-  name: string
-  content: string
-  sentiment: 'positive' | 'negative' | 'neutral'
-  rating: number[]
-  isActive: boolean
-  useFrequency: number
+  store_name: string
+  platform: string
+  platform_store_id: string
+  autoReplyEnabled: boolean
+  replyTone: string
+  minReplyLength: number
+  maxReplyLength: number
+  brandVoice: string
+  greetingTemplate: string
+  closingTemplate: string
+  seoKeywords: string[]
+  autoApprovalDelayHours: number
 }
 
-interface AutoReplySettings {
-  enabled: boolean
-  businessHours: {
-    start: string
-    end: string
-  }
-  delayMinutes: number
-  requireApproval: {
-    negative: boolean
-    complaints: boolean
-    questions: boolean
-  }
-  waitingPeriod: number // 사장님 확인 대기 기간 (시간)
-  notificationEnabled: boolean
-  templates: ReplyTemplate[]
-  keywords: {
-    positive: string[]
-    negative: string[]
-    neutral: string[]
-    questions: string[]
-    complaints: string[]
-  }
+interface ReplySettings {
+  autoReplyEnabled: boolean
+  replyTone: 'friendly' | 'formal' | 'casual'
+  minReplyLength: number
+  maxReplyLength: number
+  brandVoice: string
+  greetingTemplate: string
+  closingTemplate: string
+  seoKeywords: string[]
+  autoApprovalDelayHours: number
 }
 
 export default function ReplySettingsPage() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
+  const [loadingStores, setLoadingStores] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [stores, setStores] = useState<Store[]>([])
+  const [selectedStore, setSelectedStore] = useState<Store | null>(null)
   const [newKeyword, setNewKeyword] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<keyof typeof settings.keywords>('positive')
   
-  const [settings, setSettings] = useState<AutoReplySettings>({
-    enabled: true,
-    businessHours: {
-      start: '08:00',
-      end: '22:00'
-    },
-    delayMinutes: 30,
-    requireApproval: {
-      negative: true,
-      complaints: true,
-      questions: true
-    },
-    waitingPeriod: 48,
-    notificationEnabled: true,
-    templates: [
-      {
-        id: '1',
-        name: '긍정 리뷰 기본 답글',
-        content: '소중한 리뷰 남겨주셔서 감사합니다! 앞으로도 더 좋은 서비스로 보답하겠습니다. 언제든 다시 방문해주세요!',
-        sentiment: 'positive',
-        rating: [4, 5],
-        isActive: true,
-        useFrequency: 85
-      },
-      {
-        id: '2',
-        name: '보통 리뷰 답글',
-        content: '방문해주셔서 감사합니다. 고객님의 소중한 의견을 반영하여 더 나은 서비스를 제공하도록 노력하겠습니다.',
-        sentiment: 'neutral',
-        rating: [3],
-        isActive: true,
-        useFrequency: 45
-      },
-      {
-        id: '3',
-        name: '부정 리뷰 답글',
-        content: '불편을 끼쳐드려 죄송합니다. 고객님의 소중한 의견을 바탕으로 개선하겠습니다. 언제든 연락 주시면 성심성의껏 도움드리겠습니다.',
-        sentiment: 'negative',
-        rating: [1, 2],
-        isActive: true,
-        useFrequency: 20
-      }
-    ],
-    keywords: {
-      positive: ['맛있다', '친절하다', '깔끔하다', '좋다', '추천', '만족'],
-      negative: ['별로', '실망', '불친절', '더럽다', '비싸다', '늦다'],
-      neutral: ['보통', '괜찮다', '그럭저럭', '적당하다'],
-      questions: ['문의', '질문', '언제', '어디서', '얼마', '?'],
-      complaints: ['환불', '취소', '클레임', '불만', '신고', '항의']
-    }
+  const [settings, setSettings] = useState<ReplySettings>({
+    autoReplyEnabled: false,
+    replyTone: 'friendly',
+    minReplyLength: 50,
+    maxReplyLength: 200,
+    brandVoice: '',
+    greetingTemplate: '',
+    closingTemplate: '',
+    seoKeywords: [],
+    autoApprovalDelayHours: 48
   })
 
-  const handleSave = async () => {
-    setLoading(true)
+  // 사용자의 매장 목록 로드
+  const loadStores = async () => {
+    if (!user?.id) return
+    
+    setLoadingStores(true)
     try {
-      // API 호출 로직
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
+      const response = await fetch(`http://localhost:8002/api/user-stores/${user.id}`)
+      const data = await response.json()
+      
+      if (data.success && data.stores) {
+        setStores(data.stores)
+        // 첫 번째 매장을 자동 선택
+        if (data.stores.length > 0) {
+          selectStore(data.stores[0])
+        }
+      }
     } catch (error) {
-      console.error('설정 저장 실패:', error)
+      console.error('매장 목록 로드 실패:', error)
+    } finally {
+      setLoadingStores(false)
+    }
+  }
+
+  // 매장 선택 및 설정 로드
+  const selectStore = async (store: Store) => {
+    setSelectedStore(store)
+    setLoading(true)
+    
+    try {
+      const response = await fetch(`http://localhost:8002/api/reply-settings/${store.id}`)
+      const data = await response.json()
+      
+      if (data.success && data.settings) {
+        setSettings(data.settings)
+      }
+    } catch (error) {
+      console.error('매장 설정 로드 실패:', error)
+      // 매장 데이터에서 기본값 설정
+      setSettings({
+        autoReplyEnabled: store.autoReplyEnabled,
+        replyTone: store.replyTone as 'friendly' | 'formal' | 'casual',
+        minReplyLength: store.minReplyLength,
+        maxReplyLength: store.maxReplyLength,
+        brandVoice: store.brandVoice,
+        greetingTemplate: store.greetingTemplate,
+        closingTemplate: store.closingTemplate,
+        seoKeywords: store.seoKeywords,
+        autoApprovalDelayHours: store.autoApprovalDelayHours
+      })
     } finally {
       setLoading(false)
     }
   }
 
+  // 설정 저장
+  const handleSave = async () => {
+    if (!selectedStore) return
+    
+    setSaving(true)
+    try {
+      const response = await fetch(`http://localhost:8002/api/reply-settings/${selectedStore.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 3000)
+        // 매장 목록 새로고침
+        loadStores()
+      } else {
+        alert('설정 저장에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('설정 저장 실패:', error)
+      alert('설정 저장 중 오류가 발생했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 키워드 추가
   const addKeyword = () => {
-    if (newKeyword.trim() && !settings.keywords[selectedCategory].includes(newKeyword.trim())) {
+    if (newKeyword.trim() && !settings.seoKeywords.includes(newKeyword.trim())) {
       setSettings(prev => ({
         ...prev,
-        keywords: {
-          ...prev.keywords,
-          [selectedCategory]: [...prev.keywords[selectedCategory], newKeyword.trim()]
-        }
+        seoKeywords: [...prev.seoKeywords, newKeyword.trim()]
       }))
       setNewKeyword('')
     }
   }
 
-  const removeKeyword = (category: keyof typeof settings.keywords, keyword: string) => {
+  // 키워드 제거
+  const removeKeyword = (keyword: string) => {
     setSettings(prev => ({
       ...prev,
-      keywords: {
-        ...prev.keywords,
-        [category]: prev.keywords[category].filter(k => k !== keyword)
-      }
+      seoKeywords: prev.seoKeywords.filter(k => k !== keyword)
     }))
   }
 
-  const addTemplate = () => {
-    const newTemplate: ReplyTemplate = {
-      id: Date.now().toString(),
-      name: '새 템플릿',
-      content: '',
-      sentiment: 'positive',
-      rating: [5],
-      isActive: true,
-      useFrequency: 0
+  // 플랫폼 아이콘
+  const getPlatformBadge = (platform: string) => {
+    const colors = {
+      naver: 'bg-green-100 text-green-800',
+      baemin: 'bg-blue-100 text-blue-800', 
+      yogiyo: 'bg-orange-100 text-orange-800',
+      coupangeats: 'bg-purple-100 text-purple-800'
     }
-    setSettings(prev => ({
-      ...prev,
-      templates: [...prev.templates, newTemplate]
-    }))
-  }
-
-  const updateTemplate = (id: string, updates: Partial<ReplyTemplate>) => {
-    setSettings(prev => ({
-      ...prev,
-      templates: prev.templates.map(template => 
-        template.id === id ? { ...template, ...updates } : template
-      )
-    }))
-  }
-
-  const removeTemplate = (id: string) => {
-    setSettings(prev => ({
-      ...prev,
-      templates: prev.templates.filter(template => template.id !== id)
-    }))
-  }
-
-  const getSentimentColor = (sentiment: string) => {
-    switch (sentiment) {
-      case 'positive': return 'bg-green-100 text-green-800'
-      case 'negative': return 'bg-red-100 text-red-800'
-      case 'neutral': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
+    
+    const names = {
+      naver: '네이버',
+      baemin: '배민',
+      yogiyo: '요기요', 
+      coupangeats: '쿠팡이츠'
     }
+    
+    return (
+      <Badge className={colors[platform as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>
+        {names[platform as keyof typeof names] || platform}
+      </Badge>
+    )
   }
 
-  const getSentimentLabel = (sentiment: string) => {
-    switch (sentiment) {
-      case 'positive': return '긍정'
-      case 'negative': return '부정'
-      case 'neutral': return '중립'
-      default: return '기타'
+  // 답글 톤 예시
+  const getToneExample = (tone: string) => {
+    const examples = {
+      friendly: '안녕하세요! 소중한 리뷰 남겨주셔서 정말 감사합니다 😊 앞으로도 더욱 맛있는 음식과 친절한 서비스로 보답하겠습니다!',
+      formal: '안녕하세요. 귀하의 소중한 리뷰에 깊이 감사드립니다. 앞으로도 품질 높은 서비스를 제공하도록 최선을 다하겠습니다.',
+      casual: '와! 리뷰 고마워요~ 다음에도 또 놀러와 주세요! 더 맛있게 해드릴게요 ㅎㅎ'
     }
+    return examples[tone as keyof typeof examples] || ''
   }
 
-  const getKeywordCategoryColor = (category: string) => {
-    switch (category) {
-      case 'positive': return 'bg-green-100 text-green-800'
-      case 'negative': return 'bg-red-100 text-red-800'
-      case 'neutral': return 'bg-gray-100 text-gray-800'
-      case 'questions': return 'bg-blue-100 text-blue-800'
-      case 'complaints': return 'bg-orange-100 text-orange-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
+  useEffect(() => {
+    loadStores()
+  }, [user])
+
+  if (loadingStores) {
+    return (
+      <AppLayout>
+        <div className="max-w-6xl mx-auto p-6">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+              <p>매장 목록을 불러오는 중...</p>
+            </div>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  if (stores.length === 0) {
+    return (
+      <AppLayout>
+        <div className="max-w-6xl mx-auto p-6">
+          <div className="text-center py-12">
+            <Store className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+            <h2 className="text-xl font-semibold mb-2">등록된 매장이 없습니다</h2>
+            <p className="text-gray-600 mb-4">먼저 플랫폼 연결을 통해 매장을 등록해 주세요.</p>
+            <Button>플랫폼 연결하기</Button>
+          </div>
+        </div>
+      </AppLayout>
+    )
   }
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
         {/* 헤더 */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold brand-text">사장님 답글 설정</h1>
+            <h1 className="text-3xl font-bold brand-text">매장별 답글 설정</h1>
             <p className="text-muted-foreground">
-              AI가 자동으로 생성할 답글의 규칙과 템플릿을 설정하세요
+              각 매장별로 AI 답글 설정을 관리하세요
             </p>
           </div>
-          <Button 
-            onClick={handleSave} 
-            disabled={loading}
-            className="relative"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {loading ? '저장 중...' : '설정 저장'}
-            {saved && (
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping" />
-            )}
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              onClick={loadStores}
+              disabled={loadingStores}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              새로고침
+            </Button>
+            <Button 
+              onClick={handleSave} 
+              disabled={saving || !selectedStore}
+              className="relative"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              {saving ? '저장 중...' : '설정 저장'}
+              {saved && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping" />
+              )}
+            </Button>
+          </div>
         </div>
 
-        <Tabs defaultValue="basic" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="basic">기본 설정</TabsTrigger>
-            <TabsTrigger value="templates">답글 템플릿</TabsTrigger>
-            <TabsTrigger value="keywords">키워드 관리</TabsTrigger>
-            <TabsTrigger value="automation">자동화 규칙</TabsTrigger>
-          </TabsList>
-
-          {/* 기본 설정 */}
-          <TabsContent value="basic" className="space-y-6">
+        <div className="grid grid-cols-12 gap-6">
+          {/* 매장 목록 (왼쪽) */}
+          <div className="col-span-4">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Bot className="w-5 h-5 mr-2" />
-                  AI 답글 자동화
+                  <Store className="w-5 h-5 mr-2" />
+                  내 매장 목록
                 </CardTitle>
                 <CardDescription>
-                  AI가 자동으로 답글을 생성하고 게시하는 기본 설정입니다
+                  설정을 변경할 매장을 선택하세요
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>AI 답글 자동화 활성화</Label>
-                    <p className="text-sm text-muted-foreground">
-                      새로운 리뷰에 대해 AI가 자동으로 답글을 생성하고 게시합니다
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.enabled}
-                    onCheckedChange={(checked) => 
-                      setSettings(prev => ({ ...prev, enabled: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label>운영 시간 - 시작</Label>
-                    <Input
-                      type="time"
-                      value={settings.businessHours.start}
-                      onChange={(e) => 
-                        setSettings(prev => ({
-                          ...prev,
-                          businessHours: { ...prev.businessHours, start: e.target.value }
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>운영 시간 - 종료</Label>
-                    <Input
-                      type="time"
-                      value={settings.businessHours.end}
-                      onChange={(e) => 
-                        setSettings(prev => ({
-                          ...prev,
-                          businessHours: { ...prev.businessHours, end: e.target.value }
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>답글 생성 지연 시간 (분)</Label>
-                  <Select
-                    value={settings.delayMinutes.toString()}
-                    onValueChange={(value) => 
-                      setSettings(prev => ({ ...prev, delayMinutes: parseInt(value) }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">즉시</SelectItem>
-                      <SelectItem value="15">15분</SelectItem>
-                      <SelectItem value="30">30분</SelectItem>
-                      <SelectItem value="60">1시간</SelectItem>
-                      <SelectItem value="120">2시간</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-sm text-muted-foreground">
-                    리뷰가 등록된 후 답글을 생성하기까지의 지연 시간을 설정합니다
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>사장님 확인 대기 시간 (시간)</Label>
-                  <Select
-                    value={settings.waitingPeriod.toString()}
-                    onValueChange={(value) => 
-                      setSettings(prev => ({ ...prev, waitingPeriod: parseInt(value) }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="24">24시간</SelectItem>
-                      <SelectItem value="48">48시간</SelectItem>
-                      <SelectItem value="72">72시간</SelectItem>
-                      <SelectItem value="168">1주일</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-sm text-muted-foreground">
-                    승인이 필요한 답글을 사장님이 확인할 수 있는 시간입니다. 이 시간이 지나면 자동으로 게시됩니다.
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>알림 메시지 활성화</Label>
-                    <p className="text-sm text-muted-foreground">
-                      중요한 리뷰나 답글 승인이 필요할 때 알림톡을 보냅니다
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.notificationEnabled}
-                    onCheckedChange={(checked) => 
-                      setSettings(prev => ({ ...prev, notificationEnabled: checked }))
-                    }
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* 답글 템플릿 */}
-          <TabsContent value="templates" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">답글 템플릿 관리</h3>
-                <p className="text-sm text-muted-foreground">
-                  다양한 상황에 맞는 답글 템플릿을 관리하세요
-                </p>
-              </div>
-              <Button onClick={addTemplate}>
-                <Plus className="w-4 h-4 mr-2" />
-                템플릿 추가
-              </Button>
-            </div>
-
-            <div className="space-y-4">
-              {settings.templates.map((template) => (
-                <Card key={template.id}>
-                  <CardContent className="p-6">
-                    <div className="space-y-4">
+              <CardContent className="p-0">
+                <div className="space-y-1">
+                  {stores.map((store) => (
+                    <div
+                      key={store.id}
+                      className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors border-l-4 ${
+                        selectedStore?.id === store.id 
+                          ? 'bg-blue-50 border-l-blue-500' 
+                          : 'border-l-transparent'
+                      }`}
+                      onClick={() => selectStore(store)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-medium">{store.store_name}</h3>
+                        {getPlatformBadge(store.platform)}
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">
+                        ID: {store.platform_store_id}
+                      </p>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <Input
-                            value={template.name}
-                            onChange={(e) => updateTemplate(template.id, { name: e.target.value })}
-                            className="font-medium"
-                            placeholder="템플릿 이름"
-                          />
-                          <Badge className={getSentimentColor(template.sentiment)}>
-                            {getSentimentLabel(template.sentiment)}
-                          </Badge>
-                          <Badge variant="outline">
-                            사용률 {template.useFrequency}%
-                          </Badge>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Switch
-                            checked={template.isActive}
-                            onCheckedChange={(checked) => 
-                              updateTemplate(template.id, { isActive: checked })
-                            }
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeTemplate(template.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <Textarea
-                        value={template.content}
-                        onChange={(e) => updateTemplate(template.id, { content: e.target.value })}
-                        placeholder="답글 템플릿 내용을 입력하세요..."
-                        rows={3}
-                      />
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>감정 분류</Label>
-                          <Select
-                            value={template.sentiment}
-                            onValueChange={(value: any) => 
-                              updateTemplate(template.id, { sentiment: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="positive">긍정</SelectItem>
-                              <SelectItem value="neutral">중립</SelectItem>
-                              <SelectItem value="negative">부정</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>적용할 별점</Label>
-                          <div className="flex space-x-1">
-                            {[1, 2, 3, 4, 5].map((rating) => (
-                              <Button
-                                key={rating}
-                                variant={template.rating.includes(rating) ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => {
-                                  const newRating = template.rating.includes(rating)
-                                    ? template.rating.filter(r => r !== rating)
-                                    : [...template.rating, rating]
-                                  updateTemplate(template.id, { rating: newRating })
-                                }}
-                              >
-                                {rating}★
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          {/* 키워드 관리 */}
-          <TabsContent value="keywords" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>키워드 기반 답글 분류</CardTitle>
-                <CardDescription>
-                  리뷰 내용의 키워드를 분석하여 적절한 답글 템플릿을 선택합니다
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center space-x-4">
-                  <div className="flex-1">
-                    <Select value={selectedCategory} onValueChange={(value: any) => setSelectedCategory(value)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="positive">긍정 키워드</SelectItem>
-                        <SelectItem value="negative">부정 키워드</SelectItem>
-                        <SelectItem value="neutral">중립 키워드</SelectItem>
-                        <SelectItem value="questions">질문 키워드</SelectItem>
-                        <SelectItem value="complaints">클레임 키워드</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Input
-                    value={newKeyword}
-                    onChange={(e) => setNewKeyword(e.target.value)}
-                    placeholder="키워드 입력"
-                    onKeyPress={(e) => e.key === 'Enter' && addKeyword()}
-                    className="flex-1"
-                  />
-                  <Button onClick={addKeyword}>
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                <div className="space-y-4">
-                  {Object.entries(settings.keywords).map(([category, keywords]) => (
-                    <div key={category} className="space-y-2">
-                      <Label className="capitalize">{category} 키워드</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {keywords.map((keyword) => (
-                          <Badge 
-                            key={keyword} 
-                            className={`cursor-pointer ${getKeywordCategoryColor(category)}`}
-                          >
-                            {keyword}
-                            <X 
-                              className="w-3 h-3 ml-1"
-                              onClick={() => removeKeyword(category as keyof typeof settings.keywords, keyword)}
-                            />
-                          </Badge>
-                        ))}
+                        <span className="text-xs text-gray-500">
+                          AI 답글
+                        </span>
+                        <Badge variant={store.autoReplyEnabled ? "default" : "secondary"}>
+                          {store.autoReplyEnabled ? "ON" : "OFF"}
+                        </Badge>
                       </div>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
 
-          {/* 자동화 규칙 */}
-          <TabsContent value="automation" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <AlertTriangle className="w-5 h-5 mr-2" />
-                  사장님 승인 필요 조건
-                </CardTitle>
-                <CardDescription>
-                  어떤 상황에서 사장님의 승인을 받을지 설정합니다
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>부정적인 리뷰</Label>
-                    <p className="text-sm text-muted-foreground">
-                      1-2점 리뷰나 부정 키워드가 포함된 리뷰
+          {/* 설정 패널 (오른쪽) */}
+          <div className="col-span-8">
+            {selectedStore ? (
+              <div className="space-y-6">
+                {loading ? (
+                  <Card>
+                    <CardContent className="p-12">
+                      <div className="text-center">
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                        <p>설정을 불러오는 중...</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    {/* 기본 설정 */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <Bot className="w-5 h-5 mr-2" />
+                          {selectedStore.store_name} 기본 설정
+                        </CardTitle>
+                        <CardDescription>
+                          AI 답글 자동화 및 기본 동작 설정
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label>AI 답글 자동화 활성화</Label>
+                            <p className="text-sm text-muted-foreground">
+                              새로운 리뷰에 대해 AI가 자동으로 답글을 생성합니다
+                            </p>
+                          </div>
+                          <Switch
+                            checked={settings.autoReplyEnabled}
+                            onCheckedChange={(checked) => 
+                              setSettings(prev => ({ ...prev, autoReplyEnabled: checked }))
+                            }
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>답글 톤앤매너</Label>
+                            <Select
+                              value={settings.replyTone}
+                              onValueChange={(value: any) => 
+                                setSettings(prev => ({ ...prev, replyTone: value }))
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="friendly">친근함</SelectItem>
+                                <SelectItem value="formal">정중함</SelectItem>
+                                <SelectItem value="casual">캐주얼</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>자동 승인 대기 시간</Label>
+                            <Select
+                              value={settings.autoApprovalDelayHours.toString()}
+                              onValueChange={(value) => 
+                                setSettings(prev => ({ 
+                                  ...prev, 
+                                  autoApprovalDelayHours: parseInt(value) 
+                                }))
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="24">24시간</SelectItem>
+                                <SelectItem value="48">48시간</SelectItem>
+                                <SelectItem value="72">72시간</SelectItem>
+                                <SelectItem value="168">1주일</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>최소 답글 길이 (글자수)</Label>
+                            <Input
+                              type="number"
+                              value={settings.minReplyLength}
+                              onChange={(e) => 
+                                setSettings(prev => ({ 
+                                  ...prev, 
+                                  minReplyLength: parseInt(e.target.value) || 0 
+                                }))
+                              }
+                              min="10"
+                              max="500"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>최대 답글 길이 (글자수)</Label>
+                            <Input
+                              type="number"
+                              value={settings.maxReplyLength}
+                              onChange={(e) => 
+                                setSettings(prev => ({ 
+                                  ...prev, 
+                                  maxReplyLength: parseInt(e.target.value) || 0 
+                                }))
+                              }
+                              min="50"
+                              max="1000"
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* 답글 톤 미리보기 */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>답글 톤 미리보기</CardTitle>
+                        <CardDescription>
+                          선택한 톤에 따른 답글 예시를 확인하세요
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <p className="text-sm leading-relaxed">
+                            {getToneExample(settings.replyTone)}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* 브랜드 보이스 및 템플릿 */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <MessageSquare className="w-5 h-5 mr-2" />
+                          브랜드 보이스 및 인사말 설정
+                        </CardTitle>
+                        <CardDescription>
+                          매장의 특색과 개성이 드러나는 답글을 위한 설정
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="space-y-2">
+                          <Label>브랜드 보이스</Label>
+                          <Textarea
+                            value={settings.brandVoice}
+                            onChange={(e) => 
+                              setSettings(prev => ({ ...prev, brandVoice: e.target.value }))
+                            }
+                            placeholder="예: 20년 전통의 정성 담긴 가정식 맛집으로, 손님을 가족처럼 대하는 따뜻한 서비스..."
+                            rows={3}
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            매장의 특징과 개성을 설명해 주세요. AI가 이를 바탕으로 자연스러운 답글을 생성합니다.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>첫인사 템플릿 (선택사항)</Label>
+                            <Input
+                              value={settings.greetingTemplate}
+                              onChange={(e) => 
+                                setSettings(prev => ({ ...prev, greetingTemplate: e.target.value }))
+                              }
+                              placeholder="예: 안녕하세요! {store_name}입니다 😊"
+                            />
+                            <p className="text-sm text-muted-foreground">
+                              비워두면 AI가 자연스럽게 생성합니다
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>마무리인사 템플릿 (선택사항)</Label>
+                            <Input
+                              value={settings.closingTemplate}
+                              onChange={(e) => 
+                                setSettings(prev => ({ ...prev, closingTemplate: e.target.value }))
+                              }
+                              placeholder="예: 감사합니다. 또 방문해주세요! 🙏"
+                            />
+                            <p className="text-sm text-muted-foreground">
+                              비워두면 AI가 자연스럽게 생성합니다
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* SEO 키워드 */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>SEO 키워드 관리</CardTitle>
+                        <CardDescription>
+                          답글에 자연스럽게 포함할 키워드를 관리하세요
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            value={newKeyword}
+                            onChange={(e) => setNewKeyword(e.target.value)}
+                            placeholder="키워드 입력"
+                            onKeyPress={(e) => e.key === 'Enter' && addKeyword()}
+                            className="flex-1"
+                          />
+                          <Button onClick={addKeyword}>
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {settings.seoKeywords.map((keyword) => (
+                            <Badge 
+                              key={keyword} 
+                              variant="secondary"
+                              className="cursor-pointer"
+                            >
+                              {keyword}
+                              <X 
+                                className="w-3 h-3 ml-1"
+                                onClick={() => removeKeyword(keyword)}
+                              />
+                            </Badge>
+                          ))}
+                        </div>
+
+                        {settings.seoKeywords.length === 0 && (
+                          <p className="text-sm text-gray-500">
+                            아직 등록된 키워드가 없습니다. 매장의 특징을 나타내는 키워드를 추가해 보세요.
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-12">
+                  <div className="text-center">
+                    <Settings className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                    <h2 className="text-xl font-semibold mb-2">매장을 선택해 주세요</h2>
+                    <p className="text-gray-600">
+                      왼쪽에서 설정을 변경할 매장을 선택하세요.
                     </p>
                   </div>
-                  <Switch
-                    checked={settings.requireApproval.negative}
-                    onCheckedChange={(checked) => 
-                      setSettings(prev => ({
-                        ...prev,
-                        requireApproval: { ...prev.requireApproval, negative: checked }
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>클레임성 리뷰</Label>
-                    <p className="text-sm text-muted-foreground">
-                      환불, 취소, 불만 등의 키워드가 포함된 리뷰
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.requireApproval.complaints}
-                    onCheckedChange={(checked) => 
-                      setSettings(prev => ({
-                        ...prev,
-                        requireApproval: { ...prev.requireApproval, complaints: checked }
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>질문이 포함된 리뷰</Label>
-                    <p className="text-sm text-muted-foreground">
-                      고객이 직접적인 질문을 한 리뷰
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.requireApproval.questions}
-                    onCheckedChange={(checked) => 
-                      setSettings(prev => ({
-                        ...prev,
-                        requireApproval: { ...prev.requireApproval, questions: checked }
-                      }))
-                    }
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Clock className="w-5 h-5 mr-2" />
-                  운영 시간 및 지연 설정
-                </CardTitle>
-                <CardDescription>
-                  답글 자동화의 시간 관련 설정을 관리합니다
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex">
-                    <MessageSquare className="w-5 h-5 text-blue-600 mr-3 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-blue-800">자동화 운영 시간</h4>
-                      <p className="text-sm text-blue-600 mt-1">
-                        설정한 운영 시간 ({settings.businessHours.start} - {settings.businessHours.end}) 내에서만 
-                        답글이 자동으로 게시됩니다. 운영 시간 외에는 답글이 생성되어 대기 상태가 됩니다.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <div className="flex">
-                    <Clock className="w-5 h-5 text-orange-600 mr-3 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-orange-800">답글 지연 시간</h4>
-                      <p className="text-sm text-orange-600 mt-1">
-                        현재 {settings.delayMinutes}분 지연으로 설정되어 있습니다. 
-                        즉시 답글이 달리는 것을 방지하여 더 자연스러운 답글 타이밍을 제공합니다.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
       </div>
     </AppLayout>
   )
