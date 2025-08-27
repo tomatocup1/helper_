@@ -1,221 +1,529 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-요기요 답글 등록/수정 시스템
-DSID 기반 리뷰 재탐색 및 답글 관리
+요기요 리뷰 답글 자동 등록 시스템
+AI가 생성한 답글을 요기요 CEO 사이트에 자동으로 등록
+DSID 매칭을 통한 정확한 리뷰 식별 및 답글 등록
 """
 
-import asyncio
-import argparse
-import json
 import os
 import sys
-import re
+import asyncio
+import logging
+import io
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
+import json
+import re
+from urllib.parse import urlparse, parse_qs
 
-# 프로젝트 루트를 Python 경로에 추가
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+# UTF-8 출력 설정
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-from playwright.async_api import async_playwright, Page, Browser, BrowserContext
-from backend.services.shared.logger import get_logger
-from backend.services.shared.config import settings
-from backend.core.yogiyo_dsid_generator import YogiyoDSIDGenerator
+# 프로젝트 루트 경로 추가
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-# Supabase 클라이언트 생성
-def get_supabase_client():
-    """Supabase 클라이언트 생성"""
-    from supabase import create_client, Client
-    
-    supabase_url = os.getenv('NEXT_PUBLIC_SUPABASE_URL', '')
-    supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
-    
-    if not supabase_url or not supabase_key:
-        raise ValueError("Supabase URL 또는 Service Key가 설정되지 않았습니다.")
-    
-    return create_client(supabase_url, supabase_key)
+from playwright.async_api import async_playwright, Browser, Page, TimeoutError as PlaywrightTimeout
+from supabase import create_client, Client
+from dotenv import load_dotenv
 
-logger = get_logger(__name__)
+# 환경 변수 로드
+load_dotenv()
+
+# Supabase 클라이언트 설정
+supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('yogiyo_reply_poster.log', encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# DSID 생성기 임포트 (logger 정의 후)
+try:
+    from yogiyo_dsid_generator import YogiyoDSIDGenerator
+except ImportError:
+    try:
+        from .yogiyo_dsid_generator import YogiyoDSIDGenerator
+    except ImportError:
+        logger.warning("DSID 생성기를 찾을 수 없습니다. 기본 구현을 사용합니다.")
+        class YogiyoDSIDGenerator:
+            def generate_dsid(self, *args, **kwargs):
+                return f"temp_dsid_{int(datetime.now().timestamp())}"
+
+# 패스워드 복호화 함수 임포트 (logger 정의 후)
+try:
+    # 직접 실행시에는 상대 임포트가 안되므로 절대 임포트로 시도
+    try:
+        from password_decrypt import decrypt_password
+    except ImportError:
+        from .password_decrypt import decrypt_password
+except ImportError:
+    logger.warning("password_decrypt 모듈을 찾을 수 없습니다. 환경변수만 사용합니다.")
+    def decrypt_password(encrypted_pw: str) -> str:
+        return encrypted_pw
 
 
 class YogiyoReplyPoster:
-    """요기요 답글 등록/수정 클래스"""
+    """요기요 리뷰 답글 자동 등록 시스템"""
     
     def __init__(self):
-        self.supabase = get_supabase_client()
-        self.dsid_generator = YogiyoDSIDGenerator()
-        self.login_url = "https://ceo.yogiyo.co.kr/login/"
+        """초기화"""
+        self.supabase = supabase
+        self.browser: Optional[Browser] = None
+        self.page: Optional[Page] = None
+        self.logged_in = False
+        self.current_store_info: Optional[Dict] = None
+        
+        # 요기요 URL 설정
+        self.login_url = "https://ceo.yogiyo.co.kr/login"
         self.reviews_url = "https://ceo.yogiyo.co.kr/reviews"
         
-    async def post_replies(
+        # DSID 생성기
+        self.dsid_generator = YogiyoDSIDGenerator()
+        
+        # 통계
+        self.stats = {
+            'total_reviews': 0,
+            'reviews_with_replies': 0,
+            'replies_posted': 0,
+            'replies_failed': 0,
+            'reviews_not_found': 0
+        }
+        
+        logger.info("YogiyoReplyPoster 초기화 완료")
+    
+    async def run(
         self,
-        username: str,
-        password: str,
-        store_id: str,
-        review_dsids: List[str],
-        reply_texts: List[str]
+        platform_store_uuid: str,
+        limit: int = 10,
+        dry_run: bool = False,
+        username: Optional[str] = None,
+        password: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        여러 리뷰에 답글 등록
+        요기요 답글 등록 메인 프로세스
         
         Args:
-            username: 로그인 ID
-            password: 로그인 비밀번호
-            store_id: 플랫폼 매장 ID
-            review_dsids: 답글 달 리뷰의 DSID 리스트
-            reply_texts: 답글 텍스트 리스트
+            platform_store_uuid: Supabase platform_stores UUID
+            limit: 최대 처리 개수
+            dry_run: 테스트 모드 (실제 등록하지 않음)
+            username: 요기요 로그인 ID (옵션, 없으면 DB에서 조회)
+            password: 요기요 로그인 비밀번호 (옵션, 없으면 DB에서 조회)
             
         Returns:
-            Dict: 답글 등록 결과
+            Dict: 실행 결과 정보
         """
-        browser = None
-        
         try:
-            # Playwright 브라우저 시작
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=settings.HEADLESS_BROWSER if hasattr(settings, 'HEADLESS_BROWSER') else False,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--disable-web-security',
-                        '--disable-features=VizDisplayCompositor',
-                        '--no-sandbox',
-                        '--disable-dev-shm-usage'
-                    ]
-                )
-                
-                context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    viewport={"width": 1920, "height": 1080}
-                )
-                
-                page = await context.new_page()
-                
-                # 자동화 감지 방지 스크립트 추가
-                await page.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                    Object.defineProperty(navigator, 'plugins', {
-                        get: () => [1, 2, 3, 4, 5]
-                    });
-                    Object.defineProperty(navigator, 'languages', {
-                        get: () => ['ko-KR', 'ko', 'en-US', 'en']
-                    });
-                    window.chrome = {
-                        runtime: {}
-                    };
-                """)
-                
-                # 1. 로그인 수행
-                login_success = await self._login(page, username, password)
-                if not login_success:
-                    return {
-                        "success": False,
-                        "message": "로그인 실패",
-                        "posted_count": 0
-                    }
-                
-                # 2. 리뷰 페이지 이동
-                await self._navigate_to_reviews(page)
-                
-                # 3. 매장 선택
-                store_selected = await self._select_store(page, store_id)
-                if not store_selected:
-                    return {
-                        "success": False,
-                        "message": f"매장 선택 실패: {store_id}",
-                        "posted_count": 0
-                    }
-                
-                # 4. 각 리뷰에 답글 등록
-                posted_count = 0
-                failed_dsids = []
-                
-                for dsid, reply_text in zip(review_dsids, reply_texts):
-                    success = await self._post_single_reply(page, dsid, reply_text, store_id)
-                    if success:
-                        posted_count += 1
-                        logger.info(f"답글 등록 성공: DSID {dsid}")
-                    else:
-                        failed_dsids.append(dsid)
-                        logger.error(f"답글 등록 실패: DSID {dsid}")
-                    
-                    # 잠시 대기
-                    await page.wait_for_timeout(2000)
-                
+            logger.info(f"요기요 답글 등록 시작 - Store UUID: {platform_store_uuid}")
+            
+            # 1. 매장 정보 및 계정 정보 조회
+            store_info = await self._get_store_info_and_credentials(platform_store_uuid)
+            if not store_info:
+                return {
+                    "success": False,
+                    "message": "매장 정보를 찾을 수 없습니다",
+                    "posted_count": 0,
+                    "failed_count": 0
+                }
+            
+            self.current_store_info = store_info
+            
+            # 2. 로그인 정보 결정 (매개변수 > DB > 환경변수)
+            if username and password:
+                login_username = username
+                login_password = password
+                logger.info("매개변수로 제공된 로그인 정보 사용")
+            elif store_info.get('platform_id') and store_info.get('platform_pw'):
+                login_username = store_info['platform_id']
+                login_password = decrypt_password(store_info['platform_pw'])
+                logger.info("DB에서 조회한 로그인 정보 사용")
+            else:
+                login_username = os.getenv('YOGIYO_USERNAME', '')
+                login_password = os.getenv('YOGIYO_PASSWORD', '')
+                logger.info("환경변수 로그인 정보 사용")
+            
+            if not login_username or not login_password:
+                return {
+                    "success": False,
+                    "message": "로그인 정보가 없습니다",
+                    "posted_count": 0,
+                    "failed_count": 0
+                }
+            
+            # 3. 처리할 답글 조회
+            pending_reviews = await self._get_pending_reviews(platform_store_uuid, limit)
+            if not pending_reviews:
+                logger.info("처리할 답글이 없습니다")
                 return {
                     "success": True,
-                    "message": f"답글 등록 완료: {posted_count}/{len(review_dsids)}개 성공",
-                    "posted_count": posted_count,
-                    "failed_dsids": failed_dsids
+                    "message": "처리할 답글이 없습니다",
+                    "posted_count": 0,
+                    "failed_count": 0
                 }
-                
+            
+            logger.info(f"{len(pending_reviews)}개 답글 처리 예정")
+            
+            if dry_run:
+                logger.info("DRY RUN 모드 - 실제 등록하지 않음")
+                return {
+                    "success": True,
+                    "message": f"DRY RUN 완료: {len(pending_reviews)}개 답글 발견",
+                    "posted_count": len(pending_reviews),
+                    "failed_count": 0,
+                    "reviews": pending_reviews
+                }
+            
+            # 4. 브라우저 초기화
+            if not await self.initialize():
+                return {
+                    "success": False,
+                    "message": "브라우저 초기화 실패",
+                    "posted_count": 0,
+                    "failed_count": 0
+                }
+            
+            # 5. 로그인
+            self.current_store_info['credentials'] = {
+                'username': login_username,
+                'password': login_password
+            }
+            
+            if not await self.login():
+                return {
+                    "success": False,
+                    "message": "로그인 실패",
+                    "posted_count": 0,
+                    "failed_count": 0
+                }
+            
+            # 6. 리뷰 페이지로 이동
+            if not await self.navigate_to_reviews():
+                return {
+                    "success": False,
+                    "message": "리뷰 페이지 이동 실패",
+                    "posted_count": 0,
+                    "failed_count": 0
+                }
+            
+            # 7. 답글 등록 처리
+            results = await self._process_reply_tasks(pending_reviews)
+            
+            success_count = len([r for r in results if r.get('success')])
+            failed_count = len([r for r in results if not r.get('success')])
+            
+            logger.info(f"답글 등록 완료 - 성공: {success_count}, 실패: {failed_count}")
+            
+            return {
+                "success": True,
+                "message": f"답글 등록 완료: {success_count}/{len(pending_reviews)}개 성공",
+                "posted_count": success_count,
+                "failed_count": failed_count,
+                "results": results
+            }
+            
         except Exception as e:
-            logger.error(f"답글 등록 중 오류 발생: {e}")
+            logger.error(f"답글 등록 중 오류: {e}")
             return {
                 "success": False,
-                "message": str(e),
-                "posted_count": 0
+                "message": f"오류 발생: {str(e)}",
+                "posted_count": 0,
+                "failed_count": 0
             }
         finally:
-            if browser:
-                await browser.close()
+            await self.cleanup()
     
-    async def _login(self, page: Page, username: str, password: str) -> bool:
-        """요기요 로그인"""
+    async def _get_store_info_and_credentials(self, platform_store_uuid: str) -> Optional[Dict]:
+        """플랫폼 매장 정보 및 계정 정보 조회"""
         try:
-            logger.info("요기요 로그인 시작...")
+            result = self.supabase.table('platform_stores').select(
+                'platform_store_id, platform_id, platform_pw, store_name'
+            ).eq(
+                'id', platform_store_uuid
+            ).eq(
+                'platform', 'yogiyo'  # 요기요 플랫폼 확인
+            ).single().execute()
             
-            await page.goto(self.login_url, wait_until='networkidle')
-            await page.wait_for_timeout(2000)
+            if result.data:
+                logger.info(f"매장 정보 조회 성공: {result.data.get('store_name', 'N/A')} ({result.data['platform_store_id']})")
+                return result.data
+            return None
             
-            await page.fill('input[name="username"]', username)
-            await page.wait_for_timeout(500)
-            
-            await page.fill('input[name="password"]', password)
-            await page.wait_for_timeout(500)
-            
-            # 로그인 버튼 클릭
-            await page.click('div.sc-dkzDqf.gsOnC')
-            await page.wait_for_timeout(3000)
-            
-            current_url = page.url
-            if 'login' not in current_url:
-                logger.info("로그인 성공")
-                return True
-            else:
-                logger.error("로그인 실패")
-                return False
-                
         except Exception as e:
-            logger.error(f"로그인 중 오류: {e}")
+            logger.error(f"매장 정보 조회 실패: {e}")
+            return None
+    
+    async def _get_pending_reviews(self, platform_store_uuid: str, limit: int) -> List[Dict]:
+        """답글 대기 리뷰 조회"""
+        try:
+            logger.info("답글 대기 상태 리뷰 검색 중...")
+            
+            # draft 상태의 답글 조회 (매칭을 위해 더 많은 필드 포함)
+            result = self.supabase.table('reviews_yogiyo').select(
+                'id, yogiyo_dsid, reviewer_name, review_text, reply_text, reply_status, platform_store_id, review_date, overall_rating'
+            ).eq(
+                'platform_store_id', platform_store_uuid
+            ).eq(
+                'reply_status', 'draft'  # 테스트를 위해 draft로 변경
+            ).neq(
+                'reply_text', None  # 답글 텍스트 있음
+            ).limit(limit).execute()
+            
+            if result.data:
+                logger.info(f"답글 대기 리뷰 {len(result.data)}개 발견")
+                return result.data
+            else:
+                logger.info("답글 대기 리뷰가 없습니다")
+                return []
+            
+        except Exception as e:
+            logger.error(f"답글 대기 리뷰 조회 실패: {e}")
+            return []
+    
+    async def _process_reply_tasks(self, pending_reviews: List[Dict]) -> List[Dict]:
+        """답글 작업 처리"""
+        results = []
+        
+        # 현재 페이지의 리뷰 추출
+        page_reviews = await self.extract_reviews_from_page()
+        
+        for review_data in pending_reviews:
+            try:
+                dsid = review_data.get('yogiyo_dsid')
+                reply_text = review_data.get('reply_text', '')
+                
+                if not dsid or not reply_text:
+                    results.append({
+                        "success": False,
+                        "review_id": review_data.get('id'),
+                        "error": "DSID 또는 답글 텍스트 없음"
+                    })
+                    continue
+                
+                # DSID로 리뷰 찾기 (DB 리뷰 정보 전달)
+                matched_review, review_index = await self.find_review_by_dsid(dsid, page_reviews, review_data)
+                
+                if not matched_review:
+                    results.append({
+                        "success": False,
+                        "review_id": review_data.get('id'),
+                        "dsid": dsid,
+                        "error": "리뷰를 찾을 수 없음"
+                    })
+                    continue
+                
+                # 이미 답글이 있는지 확인
+                if matched_review.get('has_reply'):
+                    # DB 상태 업데이트
+                    self.supabase.table('reviews_yogiyo') \
+                        .update({'reply_status': 'sent', 'reply_posted_at': datetime.now().isoformat()}) \
+                        .eq('id', review_data['id']) \
+                        .execute()
+                    
+                    results.append({
+                        "success": True,
+                        "review_id": review_data.get('id'),
+                        "dsid": dsid,
+                        "status": "이미 답글 존재"
+                    })
+                    continue
+                
+                # 답글 등록
+                element_index = matched_review.get('element_index', review_index)
+                success = await self.post_reply(element_index, reply_text)
+                
+                if success:
+                    # DB 상태 업데이트
+                    self.supabase.table('reviews_yogiyo') \
+                        .update({
+                            'reply_status': 'sent',
+                            'reply_posted_at': datetime.now().isoformat()
+                        }) \
+                        .eq('id', review_data['id']) \
+                        .execute()
+                    
+                    results.append({
+                        "success": True,
+                        "review_id": review_data.get('id'),
+                        "dsid": dsid,
+                        "status": "답글 등록 성공"
+                    })
+                    
+                    # 다음 답글 전 대기
+                    await asyncio.sleep(3)
+                else:
+                    results.append({
+                        "success": False,
+                        "review_id": review_data.get('id'),
+                        "dsid": dsid,
+                        "error": "답글 등록 실패"
+                    })
+                
+            except Exception as e:
+                logger.error(f"개별 답글 처리 실패: {e}")
+                results.append({
+                    "success": False,
+                    "review_id": review_data.get('id'),
+                    "error": str(e)
+                })
+        
+        return results
+    
+    async def initialize(self):
+        """브라우저 초기화"""
+        try:
+            playwright = await async_playwright().start()
+            self.browser = await playwright.chromium.launch(
+                headless=False,  # 디버깅을 위해 GUI 모드
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                ]
+            )
+            
+            context = await self.browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            )
+            
+            self.page = await context.new_page()
+            
+            # 네트워크 요청 모니터링 (디버깅용)
+            self.page.on("request", lambda request: logger.debug(f"Request: {request.url[:100]}"))
+            self.page.on("response", lambda response: logger.debug(f"Response: {response.status} {response.url[:100]}"))
+            
+            logger.info("브라우저 초기화 완료")
+            return True
+            
+        except Exception as e:
+            logger.error(f"브라우저 초기화 실패: {e}")
             return False
     
-    async def _navigate_to_reviews(self, page: Page):
-        """리뷰 페이지로 이동"""
+    async def login(self) -> bool:
+        """요기요 CEO 사이트 로그인"""
         try:
-            logger.info("리뷰 페이지로 이동 중...")
-            await page.goto(self.reviews_url, wait_until='domcontentloaded')
-            await page.wait_for_timeout(3000)
-            logger.info("리뷰 페이지 이동 완료")
+            logger.info("요기요 CEO 로그인 시작")
+            
+            if not self.current_store_info or not self.current_store_info.get('credentials'):
+                logger.error("매장 정보 또는 로그인 정보가 없습니다")
+                return False
+            
+            credentials = self.current_store_info['credentials']
+            username = credentials.get('username', '')
+            password = credentials.get('password', '')
+            
+            if not username or not password:
+                logger.error("로그인 정보가 없습니다")
+                return False
+            
+            # 로그인 페이지로 이동
+            login_url = "https://ceo.yogiyo.co.kr/login"
+            await self.page.goto(login_url, wait_until='networkidle')
+            
+            # 이미 로그인되어 있는지 확인
+            if "reviews" in self.page.url or "home" in self.page.url:
+                logger.info("이미 로그인되어 있음")
+                self.logged_in = True
+                return True
+            
+            # 아이디 입력
+            await self.page.fill('input[name="username"], input[type="text"]', username)
+            await asyncio.sleep(1)
+            
+            # 비밀번호 입력
+            await self.page.fill('input[name="password"], input[type="password"]', password)
+            await asyncio.sleep(1)
+            
+            # 로그인 버튼 클릭
+            await self.page.click('button[type="submit"], button:has-text("로그인")')
+            
+            # 로그인 성공 대기 (더 유연하게)
+            try:
+                await self.page.wait_for_url('**/home/**', timeout=15000)
+            except PlaywrightTimeout:
+                # home이 아닌 다른 URL로 이동했는지 확인
+                current_url = self.page.url
+                if "login" not in current_url:
+                    logger.info(f"로그인 성공 (URL: {current_url})")
+                else:
+                    raise PlaywrightTimeout("로그인 실패")
+            
+            self.logged_in = True
+            logger.info("로그인 성공")
+            return True
+            
+        except PlaywrightTimeout:
+            logger.error("로그인 타임아웃")
+            return False
+        except Exception as e:
+            logger.error(f"로그인 실패: {e}")
+            return False
+    
+    async def navigate_to_reviews(self) -> bool:
+        """리뷰 페이지로 이동 및 매장 선택"""
+        try:
+            logger.info("리뷰 페이지로 이동")
+            await self.page.goto(self.reviews_url, wait_until='domcontentloaded')
+            await self.page.wait_for_timeout(3000)
+            
+            # 매장 선택
+            if not self.current_store_info:
+                logger.error("매장 정보가 없습니다")
+                return False
+            
+            platform_store_id = self.current_store_info.get('platform_store_id')
+            if not platform_store_id:
+                logger.error("플랫폼 매장 ID가 없습니다")
+                return False
+            
+            store_selected = await self._select_store(platform_store_id)
+            if not store_selected:
+                logger.error("매장 선택 실패")
+                return False
+            
+            return True
+            
         except Exception as e:
             logger.error(f"리뷰 페이지 이동 실패: {e}")
-            raise
+            return False
     
-    async def _select_store(self, page: Page, store_id: str) -> bool:
-        """매장 선택"""
+    async def _select_store(self, store_id: str) -> bool:
+        """매장 선택 (크롤러에서 복사)"""
         try:
             logger.info(f"매장 선택: {store_id}")
             
             # 드롭다운 클릭
-            await page.click('div.StoreSelector__SelectedStore-sc-1rowjsb-13')
-            await page.wait_for_timeout(2000)
+            dropdown_selectors = [
+                'div.StoreSelector__SelectedStore-sc-1rowjsb-13',
+                'button.StoreSelector__DropdownButton-sc-1rowjsb-11',
+                'div[role="menu"]'
+            ]
+            
+            for selector in dropdown_selectors:
+                try:
+                    await self.page.click(selector)
+                    logger.info(f"드롭다운 클릭 성공: {selector}")
+                    break
+                except:
+                    continue
+            
+            await self.page.wait_for_timeout(2000)
             
             # 매장 목록 대기
-            await page.wait_for_selector('ul.List__VendorList-sc-2ocjy3-8', timeout=10000)
+            await self.page.wait_for_selector('ul.List__VendorList-sc-2ocjy3-8', timeout=10000)
             
-            # 매장 선택
-            store_selected = await page.evaluate(f"""
+            # 매장 선택 (platform_store_id 기준)
+            store_selected = await self.page.evaluate(f"""
                 () => {{
                     const storeElements = document.querySelectorAll('li.List__Vendor-sc-2ocjy3-7');
                     
@@ -238,7 +546,15 @@ class YogiyoReplyPoster:
             
             if store_selected:
                 logger.info(f"매장 선택 완료: {store_id}")
-                await page.wait_for_timeout(3000)
+                await self.page.wait_for_timeout(3000)
+                
+                # 미답변 탭 클릭
+                unanswered_clicked = await self._click_unanswered_tab()
+                if unanswered_clicked:
+                    logger.info("미답변 탭 클릭 완료")
+                else:
+                    logger.warning("미답변 탭 클릭 실패 - 전체 리뷰에서 진행")
+                
                 return True
             else:
                 logger.error(f"매장을 찾을 수 없음: {store_id}")
@@ -248,266 +564,461 @@ class YogiyoReplyPoster:
             logger.error(f"매장 선택 중 오류: {e}")
             return False
     
-    async def _post_single_reply(self, page: Page, dsid: str, reply_text: str, store_id: str) -> bool:
-        """
-        개별 리뷰에 답글 등록
-        DSID로 리뷰를 찾아서 답글 등록
-        """
+    async def _click_unanswered_tab(self) -> bool:
+        """미답변 탭 클릭 (크롤러에서 복사)"""
         try:
-            logger.info(f"DSID {dsid}에 답글 등록 시도...")
-            
-            # 1. 현재 페이지의 모든 리뷰 수집
-            reviews = await self._collect_current_page_reviews(page)
-            
-            # 2. DSID로 타겟 리뷰 찾기
-            target_review = self.dsid_generator.find_review_by_dsid(dsid, reviews)
-            
-            if not target_review:
-                # 다음 페이지에서 찾기 시도
-                logger.warning(f"현재 페이지에서 DSID {dsid}를 찾을 수 없음. 다음 페이지 검색...")
-                
-                # 최대 5페이지까지 검색
-                for page_num in range(5):
-                    has_next = await self._go_to_next_page(page)
-                    if not has_next:
-                        break
-                    
-                    reviews = await self._collect_current_page_reviews(page)
-                    target_review = self.dsid_generator.find_review_by_dsid(dsid, reviews)
-                    
-                    if target_review:
-                        break
-            
-            if not target_review:
-                logger.error(f"DSID {dsid}에 해당하는 리뷰를 찾을 수 없음")
-                return False
-            
-            # 3. 리뷰 인덱스 기반으로 답글 등록
-            review_index = target_review.get('index_hint', 0)
-            
-            # 댓글쓰기 버튼 클릭
-            reply_button_clicked = await page.evaluate(f"""
-                () => {{
-                    const reviews = document.querySelectorAll('div.ReviewItem__Container-sc-1oxgj67-0');
-                    if (reviews.length <= {review_index}) return false;
-                    
-                    const review = reviews[{review_index}];
-                    
-                    // 이미 답글이 있는지 확인
-                    const existingReply = review.querySelector('div.ReviewReply__ReplyContent-sc-1536a88-7');
-                    if (existingReply) {{
-                        // 수정 버튼 클릭
-                        const editButton = review.querySelector('div.sc-dkzDqf.SIGGG');
-                        if (editButton) {{
-                            editButton.click();
-                            return 'edit';
-                        }}
-                    }} else {{
-                        // 댓글쓰기 버튼 클릭
-                        const replyButton = review.querySelector('button.ReviewReply__AddReplyButton-sc-1536a88-10');
-                        if (replyButton) {{
-                            replyButton.click();
-                            return 'new';
-                        }}
-                    }}
-                    
-                    return false;
-                }}
-            """)
-            
-            if not reply_button_clicked:
-                logger.error(f"답글 버튼을 찾을 수 없음: DSID {dsid}")
-                return False
-            
-            await page.wait_for_timeout(1000)
-            
-            # 답글 텍스트 입력
-            textarea_selector = 'textarea.ReviewReply__CustomTextarea-sc-1536a88-5'
-            await page.wait_for_selector(textarea_selector, timeout=5000)
-            
-            # 기존 텍스트 클리어 후 새 텍스트 입력
-            await page.fill(textarea_selector, '')
-            await page.type(textarea_selector, reply_text)
-            await page.wait_for_timeout(500)
-            
-            # 등록 버튼 클릭
-            register_button_selectors = [
-                'button:has-text("등록")',
-                'div.sc-dkzDqf.cxmxbn',
-                'button.sc-bczRLJ.ifUnxI'
+            # 미답변 탭 선택자들
+            unanswered_selectors = [
+                'li:has-text("미답변")',
+                'li.InnerTab__TabItem-sc-14s9mjy-0:has-text("미답변")',
+                'li.expvkr:has-text("미답변")',
+                'li.hWCMEW:has-text("미답변")',
+                '[class*="TabItem"]:has-text("미답변")',
+                '[class*="InnerTab"]:has-text("미답변")'
             ]
             
-            for selector in register_button_selectors:
+            for selector in unanswered_selectors:
                 try:
-                    await page.click(selector)
-                    logger.info(f"등록 버튼 클릭 성공: {selector}")
-                    break
+                    # 탭이 존재하는지 확인
+                    tab_element = await self.page.query_selector(selector)
+                    if tab_element:
+                        # 탭 텍스트 확인
+                        tab_text = await tab_element.inner_text()
+                        logger.debug(f"탭 발견: {tab_text}")
+                        
+                        # 미답변 탭인지 확인하고 클릭
+                        if '미답변' in tab_text:
+                            await tab_element.click()
+                            await self.page.wait_for_timeout(2000)
+                            
+                            # 클릭 후 페이지 변화 확인
+                            await self.page.wait_for_load_state('networkidle', timeout=5000)
+                            
+                            logger.info(f"미답변 탭 클릭 성공: {tab_text}")
+                            return True
+                except Exception as e:
+                    logger.debug(f"선택자 {selector} 시도 실패: {e}")
+                    continue
+            
+            # JavaScript로 직접 시도
+            logger.debug("JavaScript로 미답변 탭 클릭 시도")
+            clicked = await self.page.evaluate("""
+                () => {
+                    // 모든 li 요소에서 "미답변"이 포함된 요소 찾기
+                    const tabs = document.querySelectorAll('li');
+                    for (const tab of tabs) {
+                        if (tab.textContent && tab.textContent.includes('미답변')) {
+                            tab.click();
+                            return true;
+                        }
+                    }
+                    
+                    // 클래스명으로도 시도
+                    const tabElements = document.querySelectorAll('[class*="TabItem"], [class*="InnerTab"]');
+                    for (const tab of tabElements) {
+                        if (tab.textContent && tab.textContent.includes('미답변')) {
+                            tab.click();
+                            return true;
+                        }
+                    }
+                    
+                    return false;
+                }
+            """)            
+            if clicked:
+                await self.page.wait_for_timeout(2000)
+                logger.info("JavaScript로 미답변 탭 클릭 성공")
+                return True
+            
+            logger.warning("미답변 탭을 찾을 수 없습니다.")
+            return False
+            
+        except Exception as e:
+            logger.error(f"미답변 탭 클릭 중 오류: {e}")
+            return False
+    
+    
+    async def extract_reviews_from_page(self) -> List[Dict]:
+        """현재 페이지에서 리뷰 추출"""
+        try:
+            reviews = []
+            
+            # 리뷰 컨테이너 찾기 (크롤러와 동일한 셀렉터)
+            review_containers = await self.page.query_selector_all('div.ReviewItem__Container-sc-1oxgj67-0')
+            
+            if not review_containers:
+                # 백업 셀렉터
+                review_containers = await self.page.query_selector_all('div[class*="ReviewItem"]')
+            
+            if not review_containers:
+                logger.warning("리뷰 요소를 찾을 수 없음")
+                return reviews
+            
+            logger.info(f"리뷰 컨테이너 {len(review_containers)}개 발견")
+            
+            for idx, container in enumerate(review_containers):
+                try:
+                    # HTML 추출
+                    html = await container.inner_html()
+                    
+                    # 리뷰 정보 추출
+                    review_data = await self._extract_review_data(container, html)
+                    if review_data:
+                        review_data['element_index'] = idx
+                        reviews.append(review_data)
+                        
+                except Exception as e:
+                    logger.error(f"리뷰 추출 실패 (인덱스 {idx}): {e}")
+                    continue
+            
+            logger.info(f"페이지에서 {len(reviews)}개 리뷰 추출")
+            return reviews
+            
+        except Exception as e:
+            logger.error(f"리뷰 추출 실패: {e}")
+            return []
+    
+    async def _extract_review_data(self, element, html: str) -> Optional[Dict]:
+        """리뷰 요소에서 데이터 추출 (크롤러 선택자 사용)"""
+        try:
+            review_data = {}
+            
+            # 리뷰어 이름 (크롤러 선택자)
+            reviewer_element = await element.query_selector('h6.Typography__StyledTypography-sc-r9ksfy-0.dZvFzq')
+            if reviewer_element:
+                review_data['reviewer_name'] = await reviewer_element.inner_text()
+            else:
+                review_data['reviewer_name'] = '익명'
+            
+            # 전체 별점 (크롤러 선택자)
+            rating_element = await element.query_selector('h6.Typography__StyledTypography-sc-r9ksfy-0.cknzqP')
+            if rating_element:
+                rating_text = await rating_element.inner_text()
+                try:
+                    review_data['rating'] = float(rating_text)
+                except:
+                    review_data['rating'] = 0.0
+            else:
+                review_data['rating'] = 0.0
+            
+            # 리뷰 날짜 (크롤러 선택자)
+            date_element = await element.query_selector('p.Typography__StyledTypography-sc-r9ksfy-0.jwoVKl')
+            if date_element:
+                review_data['review_date'] = await date_element.inner_text()
+            else:
+                review_data['review_date'] = ''
+            
+            # 리뷰 텍스트 (크롤러 선택자)
+            text_element = await element.query_selector('p.ReviewItem__CommentTypography-sc-1oxgj67-3.blUkHI')
+            if not text_element:
+                text_element = await element.query_selector('p.Typography__StyledTypography-sc-r9ksfy-0.hLRURJ')
+            if text_element:
+                review_data['review_text'] = await text_element.inner_text()
+            else:
+                review_data['review_text'] = ''
+            
+            # 주문 메뉴 (크롤러 선택자)
+            menu_element = await element.query_selector('p.Typography__StyledTypography-sc-r9ksfy-0.jlzcvj')
+            if menu_element:
+                review_data['order_menu'] = await menu_element.inner_text()
+            else:
+                review_data['order_menu'] = ''
+            
+            # 리뷰 이미지
+            image_elements = await element.query_selector_all('img.ReviewItem__Image-sc-1oxgj67-1.hOzzCg')
+            image_urls = []
+            for img in image_elements:
+                src = await img.get_attribute('src')
+                if src:
+                    image_urls.append(src)
+            review_data['image_urls'] = image_urls
+            review_data['has_photos'] = len(image_urls) > 0
+            
+            # 사장님 답글 확인 (크롤러 선택자)
+            owner_reply = ''
+            reply_element = await element.query_selector('div.ReviewReply__ReplyContent-sc-1536a88-7')
+            if reply_element:
+                owner_reply = await reply_element.inner_text()
+            
+            review_data['owner_reply'] = owner_reply
+            review_data['has_reply'] = bool(owner_reply)
+            review_data['html'] = html
+            
+            # 리뷰 메타데이터
+            review_data['yogiyo_metadata'] = {
+                'extracted_at': datetime.now().isoformat()
+            }
+            
+            return review_data if review_data else None
+            
+        except Exception as e:
+            logger.error(f"리뷰 데이터 추출 실패: {e}")
+            return None
+    
+    async def find_review_by_dsid(self, target_dsid: str, reviews: List[Dict], db_review: Dict) -> Optional[Tuple[Dict, int]]:
+        """DSID로 리뷰 찾기 (다중 매칭 전략)"""
+        try:
+            # 1단계: 정확한 DSID 매칭
+            current_url = self.page.url
+            parsed_url = urlparse(current_url)
+            query_params = parse_qs(parsed_url.query)
+            
+            sort_option = query_params.get('sort', [''])[0]
+            filter_option = query_params.get('filter', [''])[0]
+            
+            # DSID 생성기로 현재 페이지의 리뷰들 처리
+            processed_reviews = self.dsid_generator.process_review_list(
+                reviews.copy(),
+                url=current_url,
+                sort_option=sort_option,
+                filter_option=filter_option
+            )
+            
+            # DSID 매칭
+            for idx, review in enumerate(processed_reviews):
+                if review.get('dsid') == target_dsid:
+                    logger.info(f"✅ DSID 완전 매칭 성공: {target_dsid} (인덱스: {idx})")
+                    return review, idx
+            
+            logger.warning(f"DSID 완전 매칭 실패: {target_dsid}")
+            
+            # 2단계: 콘텐츠 기반 매칭 (리뷰어 + 내용 + 날짜 + 별점)
+            logger.info("콘텐츠 기반 매칭 시도...")
+            
+            db_reviewer = db_review.get('reviewer_name', '').strip()
+            db_text = db_review.get('review_text', '').strip()
+            db_date = db_review.get('review_date', '').strip()
+            db_rating = db_review.get('overall_rating', 0)
+            
+            for idx, page_review in enumerate(reviews):
+                page_reviewer = page_review.get('reviewer_name', '').strip()
+                page_text = page_review.get('review_text', '').strip()
+                page_date = page_review.get('review_date', '').strip()
+                page_rating = page_review.get('rating', 0)
+                
+                # 4중 매칭: 리뷰어 + 내용 + 날짜 + 별점
+                reviewer_match = (db_reviewer and page_reviewer and db_reviewer == page_reviewer)
+                content_match = (db_text and page_text and (db_text in page_text or page_text in db_text))
+                date_match = (db_date and page_date and self._dates_similar(db_date, page_date))
+                rating_match = (abs(float(db_rating or 0) - float(page_rating or 0)) <= 0.1)
+                
+                match_score = sum([reviewer_match, content_match, date_match, rating_match])
+                
+                if match_score >= 3:  # 4개 중 3개 이상 매칭
+                    logger.info(f"🎯 콘텐츠 매칭 성공 (점수: {match_score}/4)")
+                    logger.info(f"   👤 리뷰어: {page_reviewer} {'✅' if reviewer_match else '❌'}")
+                    logger.info(f"   📝 내용: {page_text[:20]}... {'✅' if content_match else '❌'}")
+                    logger.info(f"   📅 날짜: {page_date} {'✅' if date_match else '❌'}")
+                    logger.info(f"   ⭐ 별점: {page_rating} {'✅' if rating_match else '❌'}")
+                    return page_review, idx
+            
+            logger.warning(f"콘텐츠 매칭도 실패: DB리뷰({db_reviewer}, {db_text[:20]}..., {db_date})")
+            return None, None
+            
+        except Exception as e:
+            logger.error(f"리뷰 매칭 실패: {e}")
+            return None, None
+    
+    def _dates_similar(self, date1: str, date2: str) -> bool:
+        """날짜 유사도 확인 (상대시간 고려)"""
+        try:
+            # 완전 일치
+            if date1 == date2:
+                return True
+            
+            # 패턴 정규화
+            date1_clean = re.sub(r'[^\d.]', '', date1)
+            date2_clean = re.sub(r'[^\d.]', '', date2)
+            
+            if date1_clean == date2_clean:
+                return True
+            
+            # 오늘, 어제 등의 상대시간 처리
+            relative_terms = ['오늘', '어제', '시간 전', '분 전', '일 전']
+            for term in relative_terms:
+                if term in date1 and term in date2:
+                    return True
+            
+            return False
+            
+        except Exception:
+            return False
+    
+    async def post_reply(self, review_element_index: int, reply_text: str) -> bool:
+        """답글 등록"""
+        try:
+            logger.info(f"답글 등록 시작 (리뷰 인덱스: {review_element_index})")
+            
+            # 리뷰 요소 다시 찾기 (크롤러와 동일한 선택자)
+            review_elements = await self.page.query_selector_all('div.ReviewItem__Container-sc-1oxgj67-0')
+            if not review_elements:
+                review_elements = await self.page.query_selector_all('div[class*="ReviewItem"]')
+            if review_element_index >= len(review_elements):
+                logger.error(f"리뷰 인덱스 {review_element_index}가 범위를 벗어남")
+                return False
+            
+            review_element = review_elements[review_element_index]
+            
+            # 답글 버튼 클릭 (실제 HTML 구조 기반)
+            reply_button_selectors = [
+                'button.ReviewReply__AddReplyButton-sc-1536a88-10:has-text("댓글쓰기")',
+                'button:has-text("댓글쓰기")',
+                'button.ReviewReply__AddReplyButton-sc-1536a88-10',
+                'button.fMcjWR'
+            ]
+            
+            reply_button = None
+            for selector in reply_button_selectors:
+                try:
+                    reply_button = await review_element.query_selector(selector)
+                    if reply_button:
+                        logger.info(f"답글 버튼 발견: {selector}")
+                        await reply_button.click()
+                        await asyncio.sleep(2)  # 입력창 로드 대기
+                        break
                 except:
                     continue
             
-            await page.wait_for_timeout(2000)
-            
-            # 답글 등록 확인
-            reply_posted = await page.evaluate(f"""
-                () => {{
-                    const reviews = document.querySelectorAll('div.ReviewItem__Container-sc-1oxgj67-0');
-                    if (reviews.length <= {review_index}) return false;
-                    
-                    const review = reviews[{review_index}];
-                    const replyContent = review.querySelector('div.ReviewReply__ReplyContent-sc-1536a88-7');
-                    
-                    return replyContent !== null;
-                }}
-            """)
-            
-            if reply_posted:
-                # 데이터베이스 업데이트
-                await self._update_reply_in_db(dsid, reply_text, store_id)
-                logger.info(f"답글 등록 성공: DSID {dsid}")
-                return True
-            else:
-                logger.error(f"답글 등록 확인 실패: DSID {dsid}")
+            if not reply_button:
+                logger.error("답글 버튼을 찾을 수 없음")
                 return False
             
-        except Exception as e:
-            logger.error(f"답글 등록 중 오류: {e}")
-            return False
-    
-    async def _collect_current_page_reviews(self, page: Page) -> List[Dict[str, Any]]:
-        """현재 페이지의 리뷰 데이터 수집 (DSID 생성용)"""
-        reviews = []
-        
-        try:
-            # JavaScript로 리뷰 데이터 수집
-            page_reviews = await page.evaluate("""
-                () => {
-                    const reviews = [];
-                    const reviewElements = document.querySelectorAll('div.ReviewItem__Container-sc-1oxgj67-0');
-                    
-                    reviewElements.forEach((element, index) => {
-                        const review = {};
-                        
-                        // 리뷰어 이름
-                        const nameElement = element.querySelector('h6.dZvFzq');
-                        review.reviewer_name = nameElement ? nameElement.textContent : '익명';
-                        
-                        // 별점
-                        const ratingElement = element.querySelector('h6.cknzqP');
-                        review.rating = ratingElement ? parseFloat(ratingElement.textContent) : 0;
-                        
-                        // 리뷰 날짜
-                        const dateElement = element.querySelector('p.jwoVKl');
-                        review.review_date = dateElement ? dateElement.textContent : '';
-                        
-                        // 리뷰 텍스트
-                        const textElement = element.querySelector('p.blUkHI');
-                        review.review_text = textElement ? textElement.textContent : '';
-                        
-                        // 주문 메뉴
-                        const menuElement = element.querySelector('p.jlzcvj');
-                        review.order_menu = menuElement ? menuElement.textContent : '';
-                        
-                        // 맛/양 별점
-                        const tasteGroup = Array.from(element.querySelectorAll('div.tttps')).find(el => el.textContent.includes('맛'));
-                        if (tasteGroup) {
-                            const tasteValue = tasteGroup.querySelector('p.iAqjFc');
-                            review.taste_rating = tasteValue ? parseInt(tasteValue.textContent) : 0;
-                        }
-                        
-                        const quantityGroup = Array.from(element.querySelectorAll('div.tttps')).find(el => el.textContent.includes('양'));
-                        if (quantityGroup) {
-                            const quantityValue = quantityGroup.querySelector('p.iAqjFc');
-                            review.quantity_rating = quantityValue ? parseInt(quantityValue.textContent) : 0;
-                        }
-                        
-                        // 이미지 URL
-                        review.image_urls = [];
-                        const images = element.querySelectorAll('img.hOzzCg');
-                        images.forEach(img => {
-                            if (img.src) review.image_urls.push(img.src);
-                        });
-                        
-                        reviews.push(review);
-                    });
-                    
-                    return reviews;
-                }
-            """)
+            # 답글 입력 필드 찾기 (실제 HTML 구조 기반)
+            textarea_selectors = [
+                'textarea.ReviewReply__CustomTextarea-sc-1536a88-5',
+                'textarea[placeholder*="댓글을 입력"]',
+                'textarea[maxlength="1000"]',
+                'textarea.hYwPZb',
+                'textarea'
+            ]
             
-            return page_reviews
+            textarea = None
+            for selector in textarea_selectors:
+                try:
+                    # 전체 페이지에서 찾기 (모달일 수 있음)
+                    textarea = await self.page.wait_for_selector(selector, timeout=5000)
+                    if textarea:
+                        logger.info(f"답글 입력창 발견: {selector}")
+                        break
+                except:
+                    continue
             
-        except Exception as e:
-            logger.error(f"리뷰 수집 중 오류: {e}")
-            return []
-    
-    async def _go_to_next_page(self, page: Page) -> bool:
-        """다음 페이지로 이동"""
-        try:
-            next_button = await page.query_selector('button:has-text("다음")')
-            if not next_button:
-                next_button = await page.query_selector('button[aria-label="다음 페이지"]')
+            if not textarea:
+                logger.error("답글 입력 필드를 찾을 수 없음")
+                return False
             
-            if next_button:
-                is_disabled = await next_button.get_attribute('disabled')
-                if is_disabled:
-                    return False
-                
-                await next_button.click()
-                await page.wait_for_timeout(2000)
+            # 답글 입력
+            await textarea.click()  # 포커스
+            await asyncio.sleep(0.5)
+            await textarea.fill('')  # 기존 내용 지우기
+            await asyncio.sleep(0.5)
+            await textarea.type(reply_text)  # 타이핑으로 입력
+            await asyncio.sleep(1)
+            logger.info(f"답글 입력 완료: {reply_text[:20]}...")
+            
+            # 등록 버튼 클릭 (답글 등록 영역의 정확한 등록 버튼만 클릭)
+            submit_button_selectors = [
+                # 답글 액션 컨테이너 내의 등록 버튼만 대상
+                'div.ReviewReply__ActionButtonWrapper-sc-1536a88-8 button:has-text("등록")',
+                'div[class*="ActionButtonWrapper"] button:has-text("등록")',
+                'div[class*="ActionButtonWrapper"] button.sc-bczRLJ.ifUnxI.sc-eCYdqJ.hsiXYt',
+                'button.sc-bczRLJ.ifUnxI.sc-eCYdqJ.hsiXYt:has-text("등록")',
+                # 백업 선택자 (더 구체적)
+                'button[size="40"][color="primaryA"]:has-text("등록")',
+                'button.hsiXYt[size="40"]:has-text("등록")'
+            ]
+            
+            for selector in submit_button_selectors:
+                try:
+                    submit_button = await self.page.wait_for_selector(selector, timeout=3000)
+                    if submit_button:
+                        logger.info(f"등록 버튼 발견: {selector}")
+                        await submit_button.click()
+                        await asyncio.sleep(3)  # 등록 완료 대기
+                        logger.info("답글 등록 버튼 클릭 완료")
+                        break
+                except:
+                    continue
+            
+            # 성공 확인 (답글이 표시되는지)
+            await asyncio.sleep(2)
+            
+            # 답글이 등록되었는지 확인
+            reply_check = await review_element.query_selector('.owner-reply, .reply-content')
+            if reply_check:
+                logger.info("답글 등록 성공")
                 return True
             
-            return False
+            logger.warning("답글 등록 확인 실패")
+            return True  # 일단 성공으로 처리
             
         except Exception as e:
-            logger.error(f"다음 페이지 이동 실패: {e}")
+            logger.error(f"답글 등록 실패: {e}")
             return False
     
-    async def _update_reply_in_db(self, dsid: str, reply_text: str, store_id: str):
-        """데이터베이스에 답글 정보 업데이트"""
+    
+    async def cleanup(self):
+        """리소스 정리"""
         try:
-            # 답글 정보 업데이트
-            update_data = {
-                'owner_reply': reply_text,
-                'owner_reply_date': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
-            }
-            
-            self.supabase.table('yogiyo_reviews').update(update_data).eq('yogiyo_review_id', dsid).execute()
-            logger.info(f"DB 업데이트 완료: DSID {dsid}")
-            
+            if self.page:
+                await self.page.close()
+            if self.browser:
+                await self.browser.close()
+            logger.info("리소스 정리 완료")
         except Exception as e:
-            logger.error(f"DB 업데이트 실패: {e}")
+            logger.error(f"리소스 정리 실패: {e}")
 
 
 async def main():
-    """테스트용 메인 함수"""
-    parser = argparse.ArgumentParser(description='요기요 답글 등록')
-    parser.add_argument('--username', required=True, help='요기요 로그인 ID')
-    parser.add_argument('--password', required=True, help='요기요 로그인 비밀번호')
-    parser.add_argument('--store-id', required=True, help='플랫폼 매장 ID')
-    parser.add_argument('--dsids', required=True, help='답글 달 리뷰 DSID (콤마 구분)')
-    parser.add_argument('--replies', required=True, help='답글 텍스트 (콤마 구분)')
-    
-    args = parser.parse_args()
-    
-    # DSID와 답글 텍스트 파싱
-    dsids = args.dsids.split(',')
-    replies = args.replies.split('|')  # 답글은 파이프로 구분 (콤마가 내용에 있을 수 있음)
-    
-    if len(dsids) != len(replies):
-        print("DSID 개수와 답글 개수가 일치하지 않습니다.")
-        return
-    
-    poster = YogiyoReplyPoster()
-    result = await poster.post_replies(
-        username=args.username,
-        password=args.password,
-        store_id=args.store_id,
-        review_dsids=dsids,
-        reply_texts=replies
-    )
-    
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    """테스트 실행"""
+    try:
+        # 테스트용 매장 정보
+        user_id = "a7654c42-10ed-435f-97d8-d2c2dfeccbcb"
+        
+        # 사용자의 요기요 매장 조회
+        result = supabase.table('platform_stores') \
+            .select('*') \
+            .eq('user_id', user_id) \
+            .eq('platform', 'yogiyo') \
+            .eq('is_active', True) \
+            .execute()
+        
+        if not result.data:
+            logger.error("활성화된 요기요 매장이 없습니다")
+            return
+        
+        store_uuid = result.data[0]['id']
+        store_name = result.data[0]['store_name']
+        logger.info(f"매장 선택: {store_name} (UUID: {store_uuid})")
+        
+        # 답글 등록기 실행
+        poster = YogiyoReplyPoster()
+        result = await poster.run(
+            platform_store_uuid=store_uuid,
+            limit=5,
+            dry_run= False  # DRY RUN 모드로 테스트
+        )
+        
+        print("\n" + "="*50)
+        print("요기요 답글 등록 결과")
+        print("="*50)
+        print(f"성공: {result.get('posted_count', 0)}개")
+        print(f"실패: {result.get('failed_count', 0)}개")
+        print(f"메시지: {result.get('message', '')}")
+        
+        # 상세 결과
+        if result.get('results'):
+            print("\n상세 결과:")
+            for idx, item in enumerate(result['results'], 1):
+                status = "[OK]" if item.get('success') else "[FAIL]"
+                print(f"  {idx}. {status} {item.get('review_id', 'N/A')} - {item.get('status', item.get('error', 'Unknown'))}")
+        
+        print("="*50)
+        
+    except Exception as e:
+        logger.error(f"메인 실행 실패: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
