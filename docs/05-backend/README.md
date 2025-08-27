@@ -17,7 +17,9 @@ Helper B 프로젝트의 백엔드 서버 및 API 관련 모든 문서입니다.
   - 작업 스케줄링
   - 모니터링
 
-### 네이버 관련 시스템
+### 플랫폼별 답글 시스템
+
+#### 네이버 관련 시스템
 - **[네이버 통계 시스템](README_naver_statistics.md)**
   - 통계 수집 방법
   - 데이터 처리 파이프라인
@@ -27,6 +29,12 @@ Helper B 프로젝트의 백엔드 서버 및 API 관련 모든 문서입니다.
   - [시스템 요약](naver_reply_system/NAVER_REPLY_SYSTEM_SUMMARY.md)
   - [답글 포스팅](naver_reply_system/README_reply_posting.md)
   - [통계 수집](naver_reply_system/README_statistics.md)
+
+#### 요기요 관련 시스템
+- **[요기요 답글 시스템](yogiyo_reply_system/)**
+  - [시스템 전체 요약](yogiyo_reply_system/YOGIYO_SYSTEM_SUMMARY.md)
+  - [답글 자동 등록](yogiyo_reply_system/README.md)
+  - [DSID 매칭 시스템](../../backend/core/README_YOGIYO_DSID.md)
 
 ### 기타 문서
 - **[백엔드 원본 README](backend_original_README.md)**
