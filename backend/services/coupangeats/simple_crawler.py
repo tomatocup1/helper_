@@ -4,9 +4,17 @@
 """
 
 import asyncio
+import random
+import time
 from typing import Dict, List, Tuple
 from playwright.async_api import async_playwright
 from datetime import datetime
+
+try:
+    import pyperclip  # 클립보드 제어용
+except ImportError:
+    pyperclip = None
+    print("Warning: pyperclip not installed. Using fallback typing method.")
 
 class CoupangEatsCrawler:
     """쿠팡이츠 크롤러"""
@@ -28,16 +36,33 @@ class CoupangEatsCrawler:
         """브라우저 초기화"""
         self.playwright = await async_playwright().start()
         
-        # 브라우저 실행 (더 안정적인 설정)
+        # 브라우저 실행 (강력한 스텔스 모드)
         self.browser = await self.playwright.chromium.launch(
-            headless=False,
+            headless=False,  # 강제로 헤드리스 비활성화
             args=[
+                # 핵심 스텔스 설정
                 '--disable-blink-features=AutomationControlled',
-                '--start-maximized',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                
+                # 봇 탐지 우회 설정
                 '--no-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor'
+                '--disable-gpu',
+                '--disable-infobars',
+                '--disable-background-networking',
+                '--disable-http2',
+                '--disable-extensions',
+                
+                # 실제 브라우저처럼 보이게 하는 설정
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                '--window-size=1366,768',
+                '--start-maximized',
+                
+                # 추가 보안 우회
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
             ]
         )
         print("[쿠팡이츠] 브라우저 시작")
@@ -69,14 +94,52 @@ class CoupangEatsCrawler:
         try:
             await self.initialize()
             
-            # 브라우저 컨텍스트 생성 (더 안정적인 설정)
+            # 브라우저 컨텍스트 생성 (강력한 스텔스 모드)
             context = await self.browser.new_context(
-                viewport={'width': 1280, 'height': 720},
+                viewport={'width': 1366, 'height': 768},
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                ignore_https_errors=True
+                ignore_https_errors=True,
+                # 추가 브라우저 속성 설정
+                locale="ko-KR",
+                timezone_id="Asia/Seoul",
+                geolocation={"latitude": 37.5665, "longitude": 126.9780},  # 서울
+                permissions=["geolocation"]
             )
             
             page = await context.new_page()
+            
+            # navigator.webdriver 속성 숨기기 및 기타 스텔스 설정
+            await page.add_init_script("""
+                // navigator.webdriver 제거
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined,
+                });
+                
+                // chrome 객체 추가 (실제 크롬처럼 보이게)
+                window.chrome = {
+                    runtime: {},
+                    loadTimes: function() {},
+                    csi: function() {},
+                };
+                
+                // permissions 객체 추가
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+                );
+                
+                // plugins 길이 설정 (헤드리스에서 0개로 나오는 것 방지)
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+                
+                // languages 설정
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['ko-KR', 'ko', 'en-US', 'en'],
+                });
+            """)
             
             # 타임아웃 설정 - 중요!
             page.set_default_navigation_timeout(60000)  # 60초
@@ -94,92 +157,35 @@ class CoupangEatsCrawler:
                 
             await page.wait_for_timeout(3000)
             
-            # 2. 로그인 정보 입력
-            print("[쿠팡이츠] ID/PW 입력")
-            
+            # 2. 로그인 (5회 시도)
             login_success = False
-            max_attempts = 3
+            max_attempts = 5
             
             for attempt in range(max_attempts):
+                print(f"[쿠팡이츠] 로그인 시도 {attempt + 1}/{max_attempts}")
+                
                 try:
-                    print(f"[쿠팡이츠] 로그인 시도 {attempt + 1}/{max_attempts}")
+                    login_success = await self._login_with_stealth_monitored(page, username, password)
                     
-                    # 타임스탬프 미리 정의
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    
-                    # ID 입력
-                    await page.wait_for_selector('#loginId', state='visible', timeout=10000)
-                    await page.fill('#loginId', '')  # 클리어
-                    await page.wait_for_timeout(200)
-                    await page.fill('#loginId', username)  # 입력
-                    print("[쿠팡이츠] ID 입력 완료")
-                    await page.wait_for_timeout(500)
-                    
-                    # PW 입력
-                    await page.fill('#password', '')  # 클리어
-                    await page.wait_for_timeout(200)
-                    await page.fill('#password', password)  # 입력
-                    print("[쿠팡이츠] PW 입력 완료")
-                    await page.wait_for_timeout(500)
-                    
-                    # 로그인 전 스크린샷
-                    await page.screenshot(path=f"coupangeats_before_login_{timestamp}.png")
-                    
-                    # 로그인 버튼 클릭
-                    await page.click('button[type="submit"].merchant-submit-btn')
-                    print("[쿠팡이츠] 로그인 버튼 클릭")
-                    
-                    # 로그인 처리 대기 (시간 증가)
-                    await page.wait_for_timeout(8000)
-                    
-                    # 로그인 성공 확인 (간단한 방법)
-                    current_url = page.url
-                    print(f"[쿠팡이츠] 로그인 후 현재 URL: {current_url}")
-                    
-                    if "login" not in current_url:
-                        print("[쿠팡이츠] 로그인 성공 확인됨")
-                        login_success = True
+                    if login_success:
+                        print(f"[쿠팡이츠] 로그인 성공! (시도 {attempt + 1})")
                         break
                     else:
                         print(f"[쿠팡이츠] 로그인 실패 - 시도 {attempt + 1}")
-                        # 실패 시 스크린샷 저장 (브라우저가 살아있을 때만)
-                        try:
-                            await page.screenshot(path=f"coupangeats_login_failed_{timestamp}_attempt_{attempt + 1}.png")
-                        except:
-                            print(f"[쿠팡이츠] 스크린샷 저장 실패 - 브라우저가 종료되었을 수 있음")
-                        
                         if attempt < max_attempts - 1:
                             print("[쿠팡이츠] 3초 후 재시도...")
-                            try:
-                                await page.wait_for_timeout(3000)
-                            except:
-                                print(f"[쿠팡이츠] 브라우저 종료로 인한 재시도 불가")
-                                break
-                    
+                            await page.wait_for_timeout(3000)
+                            
                 except Exception as e:
                     print(f"[쿠팡이츠] 로그인 시도 {attempt + 1} 중 오류: {e}")
-                    # 스크린샷 저장 시도 (실패해도 계속 진행)
-                    try:
-                        await page.screenshot(path=f"coupangeats_login_error_{timestamp}_attempt_{attempt + 1}.png")
-                    except:
-                        print(f"[쿠팡이츠] 오류 스크린샷 저장 실패 - 브라우저가 종료되었을 수 있음")
-                    
-                    # 브라우저 종료 관련 오류면 재시도 중단
-                    if "Target page, context or browser has been closed" in str(e) or "closed" in str(e).lower():
-                        print("[쿠팡이츠] 브라우저 종료로 인한 오류 - 재시도 중단")
-                        break
-                        
                     if attempt < max_attempts - 1:
-                        try:
-                            await page.wait_for_timeout(3000)
-                        except:
-                            print("[쿠팡이츠] 대기 중 브라우저 종료 - 재시도 중단")
-                            break
+                        print("[쿠팡이츠] 3초 후 재시도...")
+                        await page.wait_for_timeout(3000)
             
             if not login_success:
-                print("[쿠팡이츠] 모든 로그인 시도 실패")
+                print(f"[쿠팡이츠] 모든 로그인 시도 실패 ({max_attempts}회)")
                 await self.cleanup()
-                return False, [], "로그인 실패: 계정 정보를 확인하거나 사이트 접속을 확인해주세요"
+                return False, [], f"로그인 실패: {max_attempts}회 시도 후 실패. 계정 정보를 확인하거나 사이트 접속을 확인해주세요"
             
             # 로그인 성공 후 추가 처리
             current_url = page.url
@@ -311,6 +317,336 @@ class CoupangEatsCrawler:
             traceback.print_exc()
             await self.cleanup()
             return False, [], f"크롤링 중 오류가 발생했습니다: {str(e)}"
+    
+    async def _enhanced_clipboard_login(self, page, username: str, password: str) -> bool:
+        """coupang_review_crawler.py와 동일한 클립보드 로그인"""
+        try:
+            print("[쿠팡이츠] 📋 클립보드 로그인 시작...")
+            
+            # ID 입력 - pyperclip 사용 (coupang_review_crawler.py와 동일)
+            if pyperclip:
+                try:
+                    # ID 입력
+                    await page.click('#loginId')
+                    await page.keyboard.press('Control+A')
+                    pyperclip.copy(username)
+                    await page.wait_for_timeout(200)
+                    await page.keyboard.press('Control+V')
+                    print("[쿠팡이츠] ID 입력 완료")
+                    
+                    # PW 입력  
+                    await page.click('#password')
+                    await page.keyboard.press('Control+A')
+                    pyperclip.copy(password)
+                    await page.wait_for_timeout(200)
+                    await page.keyboard.press('Control+V')
+                    print("[쿠팡이츠] PW 입력 완료")
+                    
+                except Exception as clipboard_error:
+                    print(f"[쿠팡이츠] 클립보드 방식 실패, JavaScript 직접 입력으로 전환: {clipboard_error}")
+                    await self._javascript_input_fallback(page, username, password)
+            else:
+                print("[쿠팡이츠] pyperclip 없음 - JavaScript 직접 입력 방식 사용...")
+                await self._javascript_input_fallback(page, username, password)
+            
+            print("[쿠팡이츠] ✅ 로그인 입력 완료")
+            return True
+            
+        except Exception as e:
+            print(f"[쿠팡이츠] 로그인 입력 오류: {e}")
+            return False
+    
+    async def _javascript_input_fallback(self, page, username: str, password: str):
+        """클립보드 실패시 JavaScript를 통한 직접 입력 폴백 (완전한 이벤트 발생)"""
+        try:
+            # ID 입력 (모든 이벤트 발생)
+            await page.click('#loginId')
+            await page.wait_for_timeout(200)
+            
+            # 기존 값 지우기
+            await page.evaluate('document.querySelector("#loginId").value = ""')
+            
+            # 한 글자씩 입력하며 모든 이벤트 발생
+            for i in range(len(username)):
+                partial_text = username[:i+1]
+                await page.evaluate(f'''
+                    const input = document.querySelector("#loginId");
+                    input.focus();
+                    input.value = "{partial_text}";
+                    
+                    // 모든 관련 이벤트 발생
+                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true }}));
+                ''')
+                await page.wait_for_timeout(50)
+            
+            # 최종 blur 이벤트
+            await page.evaluate('''
+                const input = document.querySelector("#loginId");
+                input.dispatchEvent(new Event('blur', { bubbles: true }));
+            ''')
+            
+            # Tab키로 이동
+            await page.keyboard.press('Tab')
+            await page.wait_for_timeout(200)
+            
+            # 비밀번호 입력 (모든 이벤트 발생)
+            await page.evaluate('document.querySelector("#password").value = ""')
+            
+            for i in range(len(password)):
+                partial_text = password[:i+1]
+                await page.evaluate(f'''
+                    const input = document.querySelector("#password");
+                    input.focus();
+                    input.value = "{partial_text}";
+                    
+                    // 모든 관련 이벤트 발생
+                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true }}));
+                ''')
+                await page.wait_for_timeout(50)
+            
+            # 최종 blur 이벤트와 폼 검증 강제 실행
+            await page.evaluate('''
+                const input = document.querySelector("#password");
+                input.dispatchEvent(new Event('blur', { bubbles: true }));
+                
+                // 폼 검증 강제 실행
+                const form = document.querySelector('form');
+                if (form && form.checkValidity) {
+                    form.checkValidity();
+                }
+            ''')
+            
+            print("[쿠팡이츠] JavaScript 폴백 입력 완료 (모든 이벤트 발생)")
+            
+            # 추가로 잠시 대기하여 버튼 상태 변경 확인
+            await page.wait_for_timeout(500)
+            
+        except Exception as e:
+            print(f"[쿠팡이츠] JavaScript 입력 실패: {e}")
+    
+    async def _enhanced_random_button_click(self, page, selector: str) -> bool:
+        """간단한 랜덤 버튼 클릭"""
+        try:
+            button = await page.query_selector(selector)
+            if not button:
+                print(f"[쿠팡이츠] 버튼을 찾을 수 없음: {selector}")
+                return False
+            
+            # 버튼의 bounding box 가져오기
+            box = await button.bounding_box()
+            if box:
+                # 버튼 내부의 랜덤 위치 계산
+                margin_x = box['width'] * 0.15
+                margin_y = box['height'] * 0.15
+                
+                click_x = box['x'] + margin_x + random.random() * (box['width'] - 2 * margin_x)
+                click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
+                
+                await page.mouse.click(click_x, click_y)
+                print(f"[쿠팡이츠] ✅ 랜덤 위치 클릭: ({click_x:.1f}, {click_y:.1f})")
+            else:
+                await button.click()
+                print("[쿠팡이츠] ✅ 일반 클릭 완료")
+            
+            return True
+            
+        except Exception as e:
+            print(f"[쿠팡이츠] 버튼 클릭 오류: {e}")
+            return False
+    
+    async def _quick_login_detection(self, page) -> bool:
+        """로그인 결과 3초 빠른 감지"""
+        try:
+            print("[쿠팡이츠] 로그인 결과 대기 중 (3초 빠른 감지)...")
+            
+            # 3초동안 반복 확인
+            for i in range(3):  # 1초씩 3번 확인
+                await page.wait_for_timeout(1000)
+                current_url = page.url
+                
+                # URL 변경으로 로그인 성공 판단
+                if "/merchant/login" not in current_url:
+                    print(f"[쿠팡이츠] 로그인 성공! URL: {current_url}")
+                    return True
+                
+                # 에러 메시지 확인
+                error_element = await page.query_selector('.error, .alert, [class*="error"]')
+                if error_element:
+                    error_text = await error_element.inner_text()
+                    if error_text and error_text.strip():
+                        print(f"[쿠팡이츠] 로그인 에러: {error_text}")
+                        return False
+            
+            print("[쿠팡이츠] 로그인 실패 (3초 내 응답 없음)")
+            return False
+                
+        except Exception as e:
+            print(f"[쿠팡이츠] 로그인 감지 오류: {e}")
+            return False
+    
+    async def _login_with_stealth_monitored(self, page, username: str, password: str) -> bool:
+        """coupang_review_crawler.py와 동일한 로그인 로직"""
+        try:
+            print("🕵️ 스텔스 모드 로그인 시작...")
+            
+            # 로그인 페이지로 이동
+            print("[Monitor] 로그인 페이지로 이동 중...")
+            await page.goto("https://store.coupangeats.com/merchant/login", wait_until='domcontentloaded', timeout=30000)
+            
+            # DOM 안정화 대기
+            await page.wait_for_timeout(random.randint(3000, 5000))
+            
+            # 페이지 상태 검증
+            current_url = page.url
+            print(f"[Monitor] 현재 URL: {current_url}")
+            
+            # 성공 지표 체크 (이미 로그인된 상태인지)
+            if "/merchant/login" not in current_url:
+                print("✅ 이미 로그인된 상태")
+                return True
+            
+            # 로그인 필드 확인
+            print("[Monitor] 로그인 필드 찾는 중...")
+            await page.wait_for_selector('#loginId', timeout=10000)
+            await page.wait_for_selector('#password', timeout=10000)
+            submit_button = await page.wait_for_selector('button[type="submit"]', timeout=10000)
+            
+            # 간단한 대기 시간
+            await page.wait_for_timeout(random.randint(1000, 2000))
+            
+            # 자격 증명 입력 (클립보드 방식 우선 사용)
+            print("[Monitor] 자격 증명 입력 시작...")
+            
+            # 간단한 클립보드 로그인 (복잡한 마우스 이동 제거)
+            if pyperclip:
+                try:
+                    print("[Monitor] 📋 클립보드 로그인 시작...")
+                    
+                    # ID 입력
+                    await page.click('#loginId')
+                    await page.keyboard.press('Control+A')
+                    pyperclip.copy(username)
+                    await page.wait_for_timeout(200)
+                    await page.keyboard.press('Control+V')
+                    print("[Monitor] ID 입력 완료")
+                    
+                    # PW 입력  
+                    await page.click('#password')
+                    await page.keyboard.press('Control+A')
+                    pyperclip.copy(password)
+                    await page.wait_for_timeout(200)
+                    await page.keyboard.press('Control+V')
+                    print("[Monitor] PW 입력 완료")
+                    
+                except Exception as clipboard_error:
+                    print(f"[Monitor] 클립보드 방식 실패, JavaScript 직접 입력으로 전환: {clipboard_error}")
+                    await self._javascript_input_fallback(page, username, password)
+            else:
+                print("[Monitor] pyperclip 없음 - JavaScript를 통한 직접 입력 방식 사용...")
+                await self._javascript_input_fallback(page, username, password)
+            
+            # 간단한 마우스 이동 후 로그인 버튼 클릭
+            print("[Monitor] 🎯 로그인 버튼 클릭...")
+            await page.wait_for_timeout(500)  # 잠시 대기
+            
+            # 버튼 랜덤 클릭
+            box = await submit_button.bounding_box()
+            if box:
+                margin_x = box['width'] * 0.15
+                margin_y = box['height'] * 0.15
+                click_x = box['x'] + margin_x + random.random() * (box['width'] - 2 * margin_x)
+                click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
+                
+                await page.mouse.click(click_x, click_y)
+                print(f"[Monitor] ✅ 랜덤 위치 클릭: ({click_x:.1f}, {click_y:.1f})")
+            else:
+                await submit_button.click()
+                print("[Monitor] ✅ 일반 클릭 완료")
+            
+            print("[Monitor] 🚀 로그인 버튼 클릭 완료 - 응답 대기 시작")
+            
+            # 1단계: 빠른 실패 감지 (3초 이내)
+            print("[Monitor] 빠른 실패 감지 중 (3초)...")
+            quick_fail_detected = False
+            
+            for i in range(3):  # 3초간 1초씩 체크
+                await page.wait_for_timeout(1000)
+                current_url = page.url
+                
+                # URL이 변경되었으면 성공 가능성이 있음
+                if "/merchant/login" not in current_url:
+                    print(f"[Monitor] URL 변경 감지! 성공 가능성 있음: {current_url}")
+                    break
+                    
+                # 에러 메시지가 있으면 즉시 실패
+                error_selectors = [
+                    '.error-message', '.alert-danger', '.error', 
+                    '[class*="error"]', '[class*="alert"]',
+                    '.login-error', '.warning'
+                ]
+                
+                for selector in error_selectors:
+                    error_element = await page.query_selector(selector)
+                    if error_element:
+                        error_text = await error_element.inner_text()
+                        if error_text and error_text.strip():
+                            print(f"[Monitor] 빠른 실패 감지 - 에러 메시지: {error_text}")
+                            quick_fail_detected = True
+                            break
+                
+                if quick_fail_detected:
+                    break
+                    
+                print(f"[Monitor] 빠른 감지 {i+1}/3 - 아직 로그인 페이지")
+            
+            # 3초 후에도 로그인 페이지에 있고 에러가 없으면 빠른 실패
+            if not quick_fail_detected and "/merchant/login" in page.url:
+                print("[Monitor] ⚡ 빠른 실패 감지 - 3초 내 변화 없음, 즉시 재시도")
+                return False
+            
+            if quick_fail_detected:
+                print("[Monitor] ⚡ 빠른 실패 감지 - 에러 메시지 발견, 즉시 재시도")
+                return False
+            
+            # 2단계: 정상적인 URL 변경 대기
+            try:
+                print("[Monitor] 정상 URL 변경 대기 중...")
+                await page.wait_for_url(lambda url: "/merchant/login" not in url, timeout=12000)  # 나머지 12초
+                print("[Monitor] URL 변경됨")
+            except:
+                print("[Monitor] URL 변경 타임아웃 - 수동 확인 진행")
+            
+            # 로그인 성공 확인
+            return await self._verify_login_success_simple(page)
+            
+        except Exception as e:
+            print(f"[Monitor] 스텔스 로그인 오류: {e}")
+            return False
+    
+    async def _verify_login_success_simple(self, page) -> bool:
+        """로그인 성공 확인 (간단 버전)"""
+        try:
+            # URL 확인
+            current_url = page.url
+            if "/merchant/login" not in current_url:
+                print(f"[Monitor] URL 변경으로 로그인 성공 확인: {current_url}")
+                return True
+            
+            # 로그인 폼이 없으면 성공
+            login_form = await page.query_selector('#loginId')
+            if not login_form:
+                print("[Monitor] 로그인 폼 사라짐으로 성공 확인")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"[Monitor] 로그인 확인 중 오류: {e}")
+            return False
 
 
 # 테스트용 함수
@@ -325,72 +661,6 @@ async def test_crawler():
         print(f"메시지: {message}")
         print(f"매장 수: {len(stores)}")
 
-
-    async def _check_login_success(self, page) -> bool:
-        """로그인 성공 여부 확인"""
-        try:
-            current_url = page.url
-            print(f"[쿠팡이츠] 로그인 확인 - 현재 URL: {current_url}")
-            
-            # 1. URL 변화 확인
-            if "login" not in current_url:
-                print("[쿠팡이츠] URL 변화로 로그인 성공 확인")
-                return True
-            
-            # 2. 페이지 제목 확인
-            try:
-                title = await page.title()
-                if "로그인" not in title and "login" not in title.lower():
-                    print(f"[쿠팡이츠] 페이지 제목 변화로 로그인 성공 확인: {title}")
-                    return True
-            except:
-                pass
-            
-            # 3. 로그인 폼 존재 여부 확인 (로그인 성공시 폼이 사라짐)
-            login_form = await page.query_selector('#loginId')
-            if not login_form:
-                print("[쿠팡이츠] 로그인 폼 사라짐으로 로그인 성공 확인")
-                return True
-            
-            # 4. 대시보드 요소 확인
-            dashboard_elements = [
-                'nav', '.header', '.sidebar', '.dashboard', '.merchant-header'
-            ]
-            for selector in dashboard_elements:
-                element = await page.query_selector(selector)
-                if element:
-                    print(f"[쿠팡이츠] 대시보드 요소 발견으로 로그인 성공 확인: {selector}")
-                    return True
-            
-            print("[쿠팡이츠] 로그인 성공 확인 실패")
-            return False
-            
-        except Exception as e:
-            print(f"[쿠팡이츠] 로그인 확인 중 오류: {e}")
-            return False
-    
-    async def _get_login_error_message(self, page) -> str:
-        """로그인 에러 메시지 추출"""
-        try:
-            error_selectors = [
-                '.error-message',
-                '.alert-danger', 
-                '.error',
-                '[class*="error"]',
-                '[class*="alert"]',
-                '.validation-message'
-            ]
-            
-            for selector in error_selectors:
-                error_element = await page.query_selector(selector)
-                if error_element:
-                    error_text = await error_element.text_content()
-                    if error_text and error_text.strip():
-                        return error_text.strip()
-            
-            return ""
-        except:
-            return ""
 
 
 if __name__ == "__main__":

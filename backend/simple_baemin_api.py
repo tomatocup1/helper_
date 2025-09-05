@@ -117,6 +117,9 @@ async def connect_platform(request_data: dict):
             }
             
     elif platform == 'coupangeats':
+        import importlib
+        import services.coupangeats.simple_crawler
+        importlib.reload(services.coupangeats.simple_crawler)
         from services.coupangeats.simple_crawler import CoupangEatsCrawler
         
         try:
