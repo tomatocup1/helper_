@@ -246,7 +246,7 @@ class YogiyoAdapter(PlatformAdapter):
             reviewer_name=raw_review.get('reviewer_name', '익명'),
             reviewer_id=raw_review.get('reviewer_id'),
             reviewer_level=raw_review.get('reviewer_level'),
-            rating=raw_review.get('rating', 5),
+            rating=int(raw_review.get('overall_rating', 5)) if raw_review.get('overall_rating') else 5,
             review_text=raw_review.get('review_text', ''),
             review_date=raw_review.get('review_date'),
             reply_status=raw_review.get('reply_status', 'draft'),

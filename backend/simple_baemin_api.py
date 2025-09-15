@@ -185,7 +185,7 @@ async def get_user_stores(user_id: str):
         response = supabase.table('platform_stores').select(
             'id, store_name, platform, platform_store_id, auto_reply_enabled, '
             'reply_tone, min_reply_length, max_reply_length, brand_voice, '
-            'greeting_template, closing_template, seo_keywords, negative_review_delay_hours'
+            'greeting_template, closing_template, seo_keywords, negative_review_delay_hours, operation_type'
         ).eq('user_id', user_id).eq('is_active', True).execute()
         
         stores = []
@@ -203,7 +203,8 @@ async def get_user_stores(user_id: str):
                 "greetingTemplate": store_data.get('greeting_template', ''),
                 "closingTemplate": store_data.get('closing_template', ''),
                 "seoKeywords": store_data.get('seo_keywords', []),
-                "autoApprovalDelayHours": store_data.get('negative_review_delay_hours', 48)
+                "autoApprovalDelayHours": store_data.get('negative_review_delay_hours', 48),
+                "operationType": store_data.get('operation_type', 'both')
             })
         
         return {
@@ -222,7 +223,7 @@ async def get_reply_settings(store_id: str):
     try:
         response = supabase.table('platform_stores').select(
             'auto_reply_enabled, reply_tone, min_reply_length, max_reply_length, '
-            'brand_voice, greeting_template, closing_template, seo_keywords, negative_review_delay_hours'
+            'brand_voice, greeting_template, closing_template, seo_keywords, negative_review_delay_hours, operation_type'
         ).eq('id', store_id).single().execute()
         
         if not response.data:
@@ -238,7 +239,8 @@ async def get_reply_settings(store_id: str):
             "greetingTemplate": store_data.get('greeting_template', ''),
             "closingTemplate": store_data.get('closing_template', ''),
             "seoKeywords": store_data.get('seo_keywords', []),
-            "autoApprovalDelayHours": store_data.get('negative_review_delay_hours', 48)
+            "autoApprovalDelayHours": store_data.get('negative_review_delay_hours', 48),
+            "operationType": store_data.get('operation_type', 'both')
         }
         
         return {
@@ -255,13 +257,20 @@ async def get_reply_settings(store_id: str):
 @app.post("/api/reply-settings/{store_id}")
 async def save_reply_settings(store_id: str, settings: dict):
     """매장별 답글 설정 저장"""
-    print(f"[DEBUG] 저장 요청 받음 - store_id: {store_id}")
-    print(f"[DEBUG] 설정 데이터: {settings}")
+    print(f"[DEBUG] ===== 답글 설정 저장 시작 =====")
+    print(f"[DEBUG] store_id: {store_id}")
+    print(f"[DEBUG] 전체 설정 데이터: {settings}")
+    print(f"[DEBUG] operationType 값: {settings.get('operationType', 'NOT_FOUND')}")
+    
     try:
-        # 매장 존재 확인
-        store_check = supabase.table('platform_stores').select('id').eq('id', store_id).execute()
+        # 매장 존재 확인 및 현재 상태 조회
+        print(f"[DEBUG] 매장 존재 확인 중...")
+        store_check = supabase.table('platform_stores').select('id, operation_type').eq('id', store_id).execute()
         if not store_check.data:
+            print(f"[DEBUG] 매장을 찾을 수 없음: {store_id}")
             raise HTTPException(status_code=404, detail="매장을 찾을 수 없습니다")
+        
+        print(f"[DEBUG] 현재 매장 상태: {store_check.data[0]}")
         
         # 설정 업데이트 (실제 존재하는 컬럼들 사용)
         update_data = {
@@ -274,15 +283,31 @@ async def save_reply_settings(store_id: str, settings: dict):
             'closing_template': settings.get('closingTemplate') or None,
             'seo_keywords': settings.get('seoKeywords', []),
             'negative_review_delay_hours': settings.get('autoApprovalDelayHours', 48),
+            'operation_type': settings.get('operationType', 'both'),
             'updated_at': datetime.now().isoformat()
         }
         
+        print(f"[DEBUG] 업데이트할 데이터: {update_data}")
+        print(f"[DEBUG] operation_type 업데이트 값: {update_data.get('operation_type')}")
+        
+        print(f"[DEBUG] Supabase 업데이트 실행 중...")
         response = supabase.table('platform_stores').update(update_data).eq('id', store_id).execute()
+        
+        print(f"[DEBUG] Supabase 응답: {response}")
+        print(f"[DEBUG] 응답 데이터: {response.data}")
+        
+        # 업데이트 후 확인
+        print(f"[DEBUG] 업데이트 후 확인 중...")
+        verify_response = supabase.table('platform_stores').select('operation_type').eq('id', store_id).single().execute()
+        print(f"[DEBUG] 업데이트 후 operation_type: {verify_response.data.get('operation_type') if verify_response.data else 'NO_DATA'}")
+        
+        print(f"[DEBUG] ===== 답글 설정 저장 완료 =====")
         
         return {
             "success": True,
             "message": "답글 설정이 성공적으로 저장되었습니다",
-            "store_id": store_id
+            "store_id": store_id,
+            "updated_operation_type": update_data.get('operation_type')
         }
     except HTTPException:
         raise
@@ -336,12 +361,20 @@ async def get_reviews(platform: str = None, store_id: str = None, user_id: str =
         # 특정 플랫폼만 조회
         if platform and platform in table_mapping:
             table_name = table_mapping[platform]
-            query = supabase.from_(table_name).select('*')
+            query = supabase.from_(table_name).select('''
+                *,
+                platform_stores!inner(
+                    id,
+                    store_name,
+                    platform,
+                    user_id
+                )
+            ''')
             
             if store_id:
                 query = query.eq('platform_store_id', store_id)
-            # elif user_store_ids:  # 사용자 매장 필터 적용
-            #     query = query.in_('platform_store_id', user_store_ids)
+            elif user_store_ids:  # 사용자 매장 필터 적용
+                query = query.in_('platform_store_id', user_store_ids)
             
             query = query.order('review_date', desc=True).limit(limit)
             result = query.execute()
@@ -357,7 +390,18 @@ async def get_reviews(platform: str = None, store_id: str = None, user_id: str =
             # 배민 직접 테스트
             print("[DEBUG] 배민 직접 조회 시작")
             try:
-                baemin_result = supabase.from_('reviews_baemin').select('*').limit(10).execute()
+                baemin_query = supabase.from_('reviews_baemin').select('''
+                    *,
+                    platform_stores!inner(
+                        id,
+                        store_name,
+                        platform,
+                        user_id
+                    )
+                ''')
+                if user_store_ids:
+                    baemin_query = baemin_query.in_('platform_store_id', user_store_ids)
+                baemin_result = baemin_query.limit(10).execute()
                 print(f"[DEBUG] 배민 직접 결과: {len(baemin_result.data) if baemin_result.data else 0}개")
                 if baemin_result.data:
                     for review in baemin_result.data:
@@ -369,7 +413,18 @@ async def get_reviews(platform: str = None, store_id: str = None, user_id: str =
             # 요기요 직접 테스트  
             print("[DEBUG] 요기요 직접 조회 시작")
             try:
-                yogiyo_result = supabase.from_('reviews_yogiyo').select('*').limit(10).execute()
+                yogiyo_query = supabase.from_('reviews_yogiyo').select('''
+                    *,
+                    platform_stores!inner(
+                        id,
+                        store_name,
+                        platform,
+                        user_id
+                    )
+                ''')
+                if user_store_ids:
+                    yogiyo_query = yogiyo_query.in_('platform_store_id', user_store_ids)
+                yogiyo_result = yogiyo_query.limit(10).execute()
                 print(f"[DEBUG] 요기요 직접 결과: {len(yogiyo_result.data) if yogiyo_result.data else 0}개")
                 if yogiyo_result.data:
                     for review in yogiyo_result.data:
@@ -384,9 +439,19 @@ async def get_reviews(platform: str = None, store_id: str = None, user_id: str =
                     continue  # 이미 직접 조회했으므로 스킵
                     
                 try:
-                    query = supabase.from_(table_name).select('*')
+                    query = supabase.from_(table_name).select('''
+                        *,
+                        platform_stores!inner(
+                            id,
+                            store_name,
+                            platform,
+                            user_id
+                        )
+                    ''')
                     if store_id:
                         query = query.eq('platform_store_id', store_id)
+                    elif user_store_ids:
+                        query = query.in_('platform_store_id', user_store_ids)
                     query = query.order('review_date', desc=True).limit(limit)
                     result = query.execute()
                     

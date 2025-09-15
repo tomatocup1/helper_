@@ -173,34 +173,46 @@ class YogiyoReviewCrawler:
             logger.info("요기요 로그인 시작...")
             
             # 로그인 페이지로 이동
-            await page.goto(self.login_url, wait_until='networkidle')
-            await page.wait_for_timeout(2000)
-            
+            await page.goto(self.login_url, wait_until='domcontentloaded')
+            await page.wait_for_timeout(1000)  # 2초 -> 1초로 단축
+
             # ID 입력
             await page.fill('input[name="username"]', username)
-            await page.wait_for_timeout(500)
-            
+            await page.wait_for_timeout(200)  # 500ms -> 200ms로 단축
+
             # 비밀번호 입력
             await page.fill('input[name="password"]', password)
-            await page.wait_for_timeout(500)
-            
-            # 로그인 버튼 클릭
+            await page.wait_for_timeout(200)  # 500ms -> 200ms로 단축
+
+            # 로그인 버튼 클릭 - 정확한 셀렉터 우선 사용
             login_button_selectors = [
-                'div.sc-dkzDqf.gsOnC',
-                'button:has-text("로그인")',
-                'div[size="48"][color="primaryA"]'
+                'button[type="submit"]',  # 가장 정확한 셀렉터를 첫 번째로
+                'button.sc-bczRLJ.claiZC.sc-eCYdqJ.hsiXYt[type="submit"]',  # 구체적인 클래스
+                'button:has-text("로그인")',  # 텍스트 기반 fallback
             ]
-            
+
+            button_clicked = False
             for selector in login_button_selectors:
                 try:
-                    await page.click(selector)
+                    await page.click(selector, timeout=2000)  # 빠른 타임아웃 설정
                     logger.info(f"로그인 버튼 클릭 성공: {selector}")
+                    button_clicked = True
                     break
                 except:
+                    logger.debug(f"셀렉터 실패: {selector}")
                     continue
-            
-            # 로그인 완료 대기
-            await page.wait_for_timeout(3000)
+
+            if not button_clicked:
+                logger.error("로그인 버튼을 찾을 수 없습니다")
+                return False
+
+            # 로그인 완료 대기 (페이지 이동 감지)
+            try:
+                await page.wait_for_url(lambda url: 'login' not in url, timeout=5000)
+                logger.info("로그인 성공 - 페이지 이동 감지")
+            except:
+                # URL 변경이 없어도 일단 대기
+                await page.wait_for_timeout(2000)  # 3초 -> 2초로 단축
             
             # 로그인 성공 확인
             current_url = page.url
@@ -220,7 +232,7 @@ class YogiyoReviewCrawler:
         try:
             logger.info("리뷰 페이지로 이동 중...")
             await page.goto(self.reviews_url, wait_until='domcontentloaded')
-            await page.wait_for_timeout(3000)
+            await page.wait_for_timeout(1500)  # 3초 -> 1.5초로 단축
             logger.info("리뷰 페이지 이동 완료")
         except Exception as e:
             logger.error(f"리뷰 페이지 이동 실패: {e}")
@@ -246,10 +258,10 @@ class YogiyoReviewCrawler:
                 except:
                     continue
             
-            await page.wait_for_timeout(2000)
-            
+            await page.wait_for_timeout(1000)  # 2초 -> 1초로 단축
+
             # 매장 목록 대기
-            await page.wait_for_selector('ul.List__VendorList-sc-2ocjy3-8', timeout=10000)
+            await page.wait_for_selector('ul.List__VendorList-sc-2ocjy3-8', timeout=5000)  # 10초 -> 5초로 단축
             
             # 매장 선택 (platform_store_id 기준)
             store_selected = await page.evaluate(f"""
@@ -275,7 +287,7 @@ class YogiyoReviewCrawler:
             
             if store_selected:
                 logger.info(f"매장 선택 완료: {store_id}")
-                await page.wait_for_timeout(3000)
+                await page.wait_for_timeout(1500)  # 3초 -> 1.5초로 단축
                 
                 # 미답변 탭 클릭
                 unanswered_clicked = await self._click_unanswered_tab(page)
@@ -524,10 +536,13 @@ class YogiyoReviewCrawler:
                     image_urls.append(src)
             
             # 사장님 답글 확인
-            owner_reply = ""
+            owner_reply = None  # 기본값을 None으로 설정 (DB에 null로 저장됨)
             reply_element = await review_element.query_selector('div.ReviewReply__ReplyContent-sc-1536a88-7')
             if reply_element:
-                owner_reply = await reply_element.inner_text()
+                reply_text = await reply_element.inner_text()
+                # 답글이 실제로 있는 경우만 저장
+                if reply_text and reply_text.strip():
+                    owner_reply = reply_text.strip()
             
             review_data = {
                 'reviewer_name': reviewer_name or '익명',
@@ -762,7 +777,7 @@ class YogiyoReviewCrawler:
                         'order_menu': review.get('order_menu', ''),
                         'photo_urls': review.get('image_urls', []),
                         'has_photos': review.get('has_photos', False),
-                        'reply_text': review.get('owner_reply', ''),
+                        'reply_text': review.get('owner_reply'),  # None을 유지하여 DB에 null로 저장
                         
                         # DSID 관련 필드
                         'content_hash': review.get('content_hash', ''),

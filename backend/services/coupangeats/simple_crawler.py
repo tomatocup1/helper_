@@ -6,9 +6,16 @@
 import asyncio
 import random
 import time
+import sys
+import os
 from typing import Dict, List, Tuple
 from playwright.async_api import async_playwright
 from datetime import datetime
+
+# 프로젝트 루트 경로를 시스템 경로에 추가
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.join(current_dir, '..', '..', '..')
+sys.path.append(project_root)
 
 try:
     import pyperclip  # 클립보드 제어용
@@ -16,14 +23,29 @@ except ImportError:
     pyperclip = None
     print("Warning: pyperclip not installed. Using fallback typing method.")
 
+# 프록시 및 User-Agent 로테이터 임포트
+try:
+    from free_proxy_manager import FreeProxyManager
+    from user_agent_rotator import UserAgentRotator
+except ImportError as e:
+    print(f"Warning: Proxy/UA modules not found: {e}")
+    FreeProxyManager = None
+    UserAgentRotator = None
+
 class CoupangEatsCrawler:
-    """쿠팡이츠 크롤러"""
+    """쿠팡이츠 크롤러 - Enhanced with Proxy + User-Agent Rotation"""
     
     def __init__(self):
         self.login_url = "https://store.coupangeats.com/merchant/login"
         self.reviews_url = "https://store.coupangeats.com/merchant/management/reviews"
         self.browser = None
         self.playwright = None
+        
+        # 프록시 및 User-Agent 관리자 초기화 (프록시 비활성화)
+        self.proxy_manager = None  # 안정성을 위해 프록시 비활성화
+        self.ua_rotator = UserAgentRotator() if UserAgentRotator else None
+        self.current_proxy = None
+        self.current_user_agent = None
         
     async def __aenter__(self):
         await self.initialize()
@@ -33,39 +55,64 @@ class CoupangEatsCrawler:
         await self.cleanup()
         
     async def initialize(self):
-        """브라우저 초기화"""
+        """브라우저 초기화 - Enhanced with Proxy + User-Agent"""
         self.playwright = await async_playwright().start()
         
-        # 브라우저 실행 (강력한 스텔스 모드)
-        self.browser = await self.playwright.chromium.launch(
-            headless=False,  # 강제로 헤드리스 비활성화
-            args=[
-                # 핵심 스텔스 설정
-                '--disable-blink-features=AutomationControlled',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                
-                # 봇 탐지 우회 설정
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-infobars',
-                '--disable-background-networking',
-                '--disable-http2',
-                '--disable-extensions',
-                
-                # 실제 브라우저처럼 보이게 하는 설정
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                '--window-size=1366,768',
-                '--start-maximized',
-                
-                # 추가 보안 우회
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-            ]
-        )
-        print("[쿠팡이츠] 브라우저 시작")
+        # 프록시 비활성화, User-Agent만 설정
+        self.current_proxy = None
+        print("[쿠팡이츠] 🌐 직접 연결 사용 (프록시 비활성화)")
+        
+        if self.ua_rotator:
+            self.current_user_agent = self.ua_rotator.get_smart_user_agent()
+            print(f"[쿠팡이츠] 🔄 User-Agent: {self.current_user_agent[:60]}...")
+        else:
+            self.current_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        
+        # 랜덤 해상도 선택
+        resolutions = [
+            (1920, 1080),
+            (1366, 768), 
+            (1536, 864),
+            (1440, 900)
+        ]
+        width, height = random.choice(resolutions)
+        
+        # 브라우저 실행 옵션 구성
+        launch_args = [
+            # 핵심 스텔스 설정
+            '--disable-blink-features=AutomationControlled',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor',
+            '--disable-http2',  # HTTP/2 프로토콜 오류 방지
+            '--force-http-1',   # HTTP/1.1 강제 사용
+            
+            # 봇 탐지 우회 설정
+            '--no-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-infobars',
+            '--disable-background-networking',
+            '--disable-extensions',
+            
+            # 실제 브라우저처럼 보이게 하는 설정
+            f'--user-agent={self.current_user_agent}',
+            f'--window-size={width},{height}',
+            '--start-maximized',
+            
+            # 추가 보안 우회
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+        ]
+        
+        # 직접 연결 설정 (프록시 없음)
+        launch_options = {
+            'headless': False,  # 강제로 헤드리스 비활성화
+            'args': launch_args
+        }
+        
+        self.browser = await self.playwright.chromium.launch(**launch_options)
+        print(f"[쿠팡이츠] 브라우저 시작 ({width}x{height}) - 직접 연결")
             
     async def cleanup(self):
         """브라우저 정리"""
@@ -94,10 +141,14 @@ class CoupangEatsCrawler:
         try:
             await self.initialize()
             
-            # 브라우저 컨텍스트 생성 (강력한 스텔스 모드)
+            # 동적 해상도 설정
+            resolutions = [(1920, 1080), (1366, 768), (1536, 864), (1440, 900)]
+            viewport_width, viewport_height = random.choice(resolutions)
+            
+            # 브라우저 컨텍스트 생성 (Enhanced 스텔스 모드)
             context = await self.browser.new_context(
-                viewport={'width': 1366, 'height': 768},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                viewport={'width': viewport_width, 'height': viewport_height},
+                user_agent=self.current_user_agent,
                 ignore_https_errors=True,
                 # 추가 브라우저 속성 설정
                 locale="ko-KR",
@@ -105,6 +156,7 @@ class CoupangEatsCrawler:
                 geolocation={"latitude": 37.5665, "longitude": 126.9780},  # 서울
                 permissions=["geolocation"]
             )
+            print(f"[쿠팡이츠] 컨텍스트 생성 완료 ({viewport_width}x{viewport_height})")
             
             page = await context.new_page()
             
@@ -169,6 +221,10 @@ class CoupangEatsCrawler:
                     
                     if login_success:
                         print(f"[쿠팡이츠] 로그인 성공! (시도 {attempt + 1})")
+                        # User-Agent 성공 기록
+                        if self.ua_rotator and self.current_user_agent:
+                            self.ua_rotator.mark_success(self.current_user_agent)
+                            print("[쿠팡이츠] User-Agent 성공으로 기록됨")
                         break
                     else:
                         print(f"[쿠팡이츠] 로그인 실패 - 시도 {attempt + 1}")
@@ -184,6 +240,10 @@ class CoupangEatsCrawler:
             
             if not login_success:
                 print(f"[쿠팡이츠] 모든 로그인 시도 실패 ({max_attempts}회)")
+                # User-Agent 실패 기록
+                if self.ua_rotator and self.current_user_agent:
+                    self.ua_rotator.mark_failure(self.current_user_agent)
+                    print("[쿠팡이츠] User-Agent 실패로 기록됨")
                 await self.cleanup()
                 return False, [], f"로그인 실패: {max_attempts}회 시도 후 실패. 계정 정보를 확인하거나 사이트 접속을 확인해주세요"
             
@@ -326,16 +386,48 @@ class CoupangEatsCrawler:
             # ID 입력 - pyperclip 사용 (coupang_review_crawler.py와 동일)
             if pyperclip:
                 try:
-                    # ID 입력
-                    await page.click('#loginId')
+                    # ID 입력 - 랜덤 클릭 with 15% margin
+                    print("[쿠팡이츠] ID 필드 랜덤 클릭...")
+                    id_element = await page.query_selector('#loginId')
+                    if id_element:
+                        box = await id_element.bounding_box()
+                        if box:
+                            margin_x = box['width'] * 0.15
+                            margin_y = box['height'] * 0.15
+                            click_x = box['x'] + margin_x + random.random() * (box['width'] - 2 * margin_x)
+                            click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
+                            await page.mouse.click(click_x, click_y)
+                            print(f"[쿠팡이츠] ID 필드 랜덤 클릭 완료: ({click_x:.1f}, {click_y:.1f})")
+                        else:
+                            await page.click('#loginId')
+                    else:
+                        await page.click('#loginId')
+                    
+                    await page.wait_for_timeout(random.randint(800, 1200))  # ~1초 대기
                     await page.keyboard.press('Control+A')
                     pyperclip.copy(username)
                     await page.wait_for_timeout(200)
                     await page.keyboard.press('Control+V')
                     print("[쿠팡이츠] ID 입력 완료")
                     
-                    # PW 입력  
-                    await page.click('#password')
+                    # PW 입력 - 랜덤 클릭 with 15% margin
+                    print("[쿠팡이츠] PW 필드 랜덤 클릭...")
+                    pw_element = await page.query_selector('#password')
+                    if pw_element:
+                        box = await pw_element.bounding_box()
+                        if box:
+                            margin_x = box['width'] * 0.15
+                            margin_y = box['height'] * 0.15
+                            click_x = box['x'] + margin_x + random.random() * (box['width'] - 2 * margin_x)
+                            click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
+                            await page.mouse.click(click_x, click_y)
+                            print(f"[쿠팡이츠] PW 필드 랜덤 클릭 완료: ({click_x:.1f}, {click_y:.1f})")
+                        else:
+                            await page.click('#password')
+                    else:
+                        await page.click('#password')
+                    
+                    await page.wait_for_timeout(random.randint(800, 1200))  # ~1초 대기
                     await page.keyboard.press('Control+A')
                     pyperclip.copy(password)
                     await page.wait_for_timeout(200)
@@ -359,9 +451,23 @@ class CoupangEatsCrawler:
     async def _javascript_input_fallback(self, page, username: str, password: str):
         """클립보드 실패시 JavaScript를 통한 직접 입력 폴백 (완전한 이벤트 발생)"""
         try:
-            # ID 입력 (모든 이벤트 발생)
-            await page.click('#loginId')
-            await page.wait_for_timeout(200)
+            # ID 입력 (모든 이벤트 발생) - 랜덤 클릭 with 15% margin
+            print("[쿠팡이츠] ID 필드 랜덤 클릭 (JavaScript 폴백)...")
+            id_element = await page.query_selector('#loginId')
+            if id_element:
+                box = await id_element.bounding_box()
+                if box:
+                    margin_x = box['width'] * 0.15
+                    margin_y = box['height'] * 0.15
+                    click_x = box['x'] + margin_x + random.random() * (box['width'] - 2 * margin_x)
+                    click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
+                    await page.mouse.click(click_x, click_y)
+                    print(f"[쿠팡이츠] ID 필드 랜덤 클릭 완료: ({click_x:.1f}, {click_y:.1f})")
+                else:
+                    await page.click('#loginId')
+            else:
+                await page.click('#loginId')
+            await page.wait_for_timeout(random.randint(800, 1200))  # ~1초 대기
             
             # 기존 값 지우기
             await page.evaluate('document.querySelector("#loginId").value = ""')
@@ -459,18 +565,18 @@ class CoupangEatsCrawler:
             return False
     
     async def _quick_login_detection(self, page) -> bool:
-        """로그인 결과 3초 빠른 감지"""
+        """로그인 결과 8초 빠른 감지 (API 응답 대기 시간 연장)"""
         try:
-            print("[쿠팡이츠] 로그인 결과 대기 중 (3초 빠른 감지)...")
+            print("[쿠팡이츠] 로그인 결과 대기 중 (8초 API 응답 대기)...")
             
-            # 3초동안 반복 확인
-            for i in range(3):  # 1초씩 3번 확인
+            # 8초동안 반복 확인 (API 응답 대기 시간 연장)
+            for i in range(8):  # 1초씩 8번 확인
                 await page.wait_for_timeout(1000)
                 current_url = page.url
                 
                 # URL 변경으로 로그인 성공 판단
                 if "/merchant/login" not in current_url:
-                    print(f"[쿠팡이츠] 로그인 성공! URL: {current_url}")
+                    print(f"[쿠팡이츠] 로그인 성공! URL: {current_url} (대기 시간: {i+1}초)")
                     return True
                 
                 # 에러 메시지 확인
@@ -481,7 +587,7 @@ class CoupangEatsCrawler:
                         print(f"[쿠팡이츠] 로그인 에러: {error_text}")
                         return False
             
-            print("[쿠팡이츠] 로그인 실패 (3초 내 응답 없음)")
+            print("[쿠팡이츠] 로그인 실패 (8초 내 응답 없음)")
             return False
                 
         except Exception as e:
@@ -526,16 +632,48 @@ class CoupangEatsCrawler:
                 try:
                     print("[Monitor] 📋 클립보드 로그인 시작...")
                     
-                    # ID 입력
-                    await page.click('#loginId')
+                    # ID 입력 - 랜덤 클릭 with 15% margin
+                    print("[Monitor] ID 필드 랜덤 클릭...")
+                    id_element = await page.query_selector('#loginId')
+                    if id_element:
+                        box = await id_element.bounding_box()
+                        if box:
+                            margin_x = box['width'] * 0.15
+                            margin_y = box['height'] * 0.15
+                            click_x = box['x'] + margin_x + random.random() * (box['width'] - 2 * margin_x)
+                            click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
+                            await page.mouse.click(click_x, click_y)
+                            print(f"[Monitor] ID 필드 랜덤 클릭 완료: ({click_x:.1f}, {click_y:.1f})")
+                        else:
+                            await page.click('#loginId')
+                    else:
+                        await page.click('#loginId')
+                    
+                    await page.wait_for_timeout(random.randint(800, 1200))  # ~1초 대기
                     await page.keyboard.press('Control+A')
                     pyperclip.copy(username)
                     await page.wait_for_timeout(200)
                     await page.keyboard.press('Control+V')
                     print("[Monitor] ID 입력 완료")
                     
-                    # PW 입력  
-                    await page.click('#password')
+                    # PW 입력 - 랜덤 클릭 with 15% margin  
+                    print("[Monitor] PW 필드 랜덤 클릭...")
+                    pw_element = await page.query_selector('#password')
+                    if pw_element:
+                        box = await pw_element.bounding_box()
+                        if box:
+                            margin_x = box['width'] * 0.15
+                            margin_y = box['height'] * 0.15
+                            click_x = box['x'] + margin_x + random.random() * (box['width'] - 2 * margin_x)
+                            click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
+                            await page.mouse.click(click_x, click_y)
+                            print(f"[Monitor] PW 필드 랜덤 클릭 완료: ({click_x:.1f}, {click_y:.1f})")
+                        else:
+                            await page.click('#password')
+                    else:
+                        await page.click('#password')
+                        
+                    await page.wait_for_timeout(random.randint(800, 1200))  # ~1초 대기
                     await page.keyboard.press('Control+A')
                     pyperclip.copy(password)
                     await page.wait_for_timeout(200)

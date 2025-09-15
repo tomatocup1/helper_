@@ -93,8 +93,13 @@ class NaverReviewCrawler:
         try:
             print(f"Starting review crawling for store: {store_id}")
             
-            # 로그인 처리 및 브라우저 세션 유지
-            login_result = await self.login_system.login(platform_id, platform_password, keep_browser_open=True)
+            # 로그인 처리 및 브라우저 세션 유지 (매장 크롤링 비활성화)
+            login_result = await self.login_system.login(
+                platform_id, 
+                platform_password, 
+                keep_browser_open=True,
+                crawl_stores=False  # 리뷰 크롤러는 매장 크롤링 불필요
+            )
             if not login_result['success']:
                 return {
                     'success': False,
@@ -160,11 +165,16 @@ class NaverReviewCrawler:
     async def _crawl_review_page_with_session(self, browser, page, store_id: str, days: int) -> List[Dict]:
         """기존 브라우저 세션을 사용한 리뷰 페이지 크롤링"""
         try:
-            # 리뷰 페이지 URL 생성
+            # 리뷰 페이지 URL 생성 (지정된 store_id 사용)
             review_url = f"https://new.smartplace.naver.com/bizes/place/{store_id}/reviews"
-            await page.goto(review_url, wait_until='networkidle', timeout=self.timeout)
+            print(f"✅ 지정된 매장 ID로 직접 이동: {store_id}")
+            print(f"리뷰 페이지 URL: {review_url}")
             
-            print(f"리뷰 페이지 접속: {review_url}")
+            # 최적화: 직접 리뷰 페이지로 이동 (대기시간 단축)
+            await page.goto(review_url, wait_until='domcontentloaded', timeout=self.timeout)
+            await page.wait_for_timeout(3000)  # 최적화: 대기시간 단축 (networkidle 대신 3초 고정)
+            
+            print(f"✅ 리뷰 페이지 접속 완료: {review_url}")
             
             # 팝업 닫기 처리 (리뷰 페이지에서 나타나는 팝업)
             await self._close_popup_if_exists(page)
@@ -217,11 +227,16 @@ class NaverReviewCrawler:
             
             page = browser.pages[0] if browser.pages else await browser.new_page()
             
-            # 리뷰 페이지 URL 생성
+            # 리뷰 페이지 URL 생성 (지정된 store_id 사용)
             review_url = f"https://new.smartplace.naver.com/bizes/place/{store_id}/reviews"
-            await page.goto(review_url, wait_until='networkidle', timeout=self.timeout)
+            print(f"✅ 지정된 매장 ID로 직접 이동: {store_id}")
+            print(f"리뷰 페이지 URL: {review_url}")
             
-            print(f"리뷰 페이지 접속: {review_url}")
+            # 최적화: 직접 리뷰 페이지로 이동 (대기시간 단축)
+            await page.goto(review_url, wait_until='domcontentloaded', timeout=self.timeout)
+            await page.wait_for_timeout(3000)  # 최적화: 대기시간 단축 (networkidle 대신 3초 고정)
+            
+            print(f"✅ 리뷰 페이지 접속 완료: {review_url}")
             
             # 날짜 필터 설정
             await self._set_date_filter(page, days)

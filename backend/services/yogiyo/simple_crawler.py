@@ -95,22 +95,61 @@ class YogiyoCrawler:
             print(f"[요기요] 로그인 시도: {username}")
             
             # 로그인 페이지로 이동
-            await self.page.goto(self.login_url, wait_until='networkidle')
-            await asyncio.sleep(2)
-            
+            await self.page.goto(self.login_url, wait_until='domcontentloaded')  # networkidle -> domcontentloaded로 변경
+            await asyncio.sleep(1)  # 2초 -> 1초로 단축
+
             # ID 입력
             await self.page.fill('input[name="username"]', username)
-            await asyncio.sleep(0.5)
-            
+            await asyncio.sleep(0.2)  # 0.5초 -> 0.2초로 단축
+
             # 비밀번호 입력
             await self.page.fill('input[name="password"]', password)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)  # 0.5초 -> 0.2초로 단축
             
-            # 로그인 버튼 클릭
-            await self.page.click('div.sc-dkzDqf.gsOnC')
-            
-            # 로그인 완료 대기
-            await asyncio.sleep(3)
+            # 로그인 버튼 클릭 - 빠른 실행
+            print("[요기요] 로그인 버튼 클릭 시도...")
+            button_clicked = False
+
+            # 방법 1: submit 타입 버튼 (가장 빠른 셀렉터)
+            try:
+                await self.page.click('button[type="submit"]', timeout=2000)
+                print("[요기요] 로그인 버튼 클릭 성공 (방법 1: submit 버튼)")
+                button_clicked = True
+            except:
+                pass
+
+            # 방법 2: 구체적인 클래스 (필요한 경우만)
+            if not button_clicked:
+                try:
+                    await self.page.click('button.sc-bczRLJ.claiZC.sc-eCYdqJ.hsiXYt[type="submit"]', timeout=2000)
+                    print("[요기요] 로그인 버튼 클릭 성공 (방법 2: 구체적 클래스)")
+                    button_clicked = True
+                except:
+                    pass
+
+            # 방법 3: 텍스트 기반 (최후 수단)
+            if not button_clicked:
+                try:
+                    await self.page.click('button:has-text("로그인")', timeout=2000)
+                    print("[요기요] 로그인 버튼 클릭 성공 (방법 3: 텍스트)")
+                    button_clicked = True
+                except:
+                    pass
+
+            if not button_clicked:
+                raise Exception("로그인 버튼을 찾을 수 없습니다")
+
+            # 로그인 완료 대기 (페이지 이동 감지)
+            try:
+                # URL 변경을 기다리거나 특정 요소 대기
+                await self.page.wait_for_function(
+                    "window.location.href.indexOf('login') === -1",
+                    timeout=5000
+                )
+                print("[요기요] 로그인 성공 - 페이지 이동 감지")
+            except:
+                # URL 변경이 없어도 짧게 대기
+                await asyncio.sleep(2)  # 3초 -> 2초로 단축
             
             # 로그인 성공 확인
             current_url = self.page.url

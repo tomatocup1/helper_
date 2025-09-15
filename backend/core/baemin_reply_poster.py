@@ -30,6 +30,15 @@ class BaeminReplyPoster:
         self.context = None
         self.page = None
         
+        # 금지어 목록 (배민에서 차단하는 경쟁업체 키워드)
+        self.forbidden_words = [
+            '요기요', '요기요', 'yogiyo', 'YOGIYO',
+            '쿠팡이츠', '쿠팡잇츠', '쿠팡 이츠', 'coupangeats', 'COUPANGEATS',
+            '배달요', '딜리버리히어로', '위메프오', '위메프 오',
+            '배달통', '배민라이더스', '띵동',  # 경쟁 서비스들
+            '네이버', 'naver', 'NAVER',  # 네이버도 경쟁사로 분류될 수 있음
+        ]
+        
         # Supabase 클라이언트 초기화
         load_dotenv()
         supabase_url = os.getenv('NEXT_PUBLIC_SUPABASE_URL')
@@ -88,6 +97,9 @@ class BaeminReplyPoster:
             
             await self.page.wait_for_timeout(3000)
             
+            # 팝업 닫기 시도
+            await self._close_popup_if_exists(self.page)
+            
             # 5. 미답변 탭 클릭 (답글 등록할 리뷰만 표시)
             try:
                 # 여러 가능한 미답변 탭 선택자 시도
@@ -128,7 +140,8 @@ class BaeminReplyPoster:
                     result = await self._post_single_reply(
                         self.page, 
                         review['baemin_review_id'],
-                        review['reply_text']
+                        review['reply_text'],
+                        review  # review 객체 전달
                     )
                     
                     if result['success']:
@@ -142,7 +155,12 @@ class BaeminReplyPoster:
                         print(f"[BAEMIN] [OK] 리뷰 {review['baemin_review_id']} 답글 등록 성공")
                     else:
                         failed_count += 1
-                        print(f"[BAEMIN] [ERROR] 리뷰 {review['baemin_review_id']} 답글 등록 실패: {result.get('error')}")
+                        # 금지어 실패인 경우 특별 처리
+                        if 'Forbidden word' in result.get('error', ''):
+                            print(f"[BAEMIN] [WARN] 리뷰 {review['baemin_review_id']} 금지어로 인한 실패")
+                            # failure_reason은 이미 _post_single_reply에서 DB에 저장됨
+                        else:
+                            print(f"[BAEMIN] [ERROR] 리뷰 {review['baemin_review_id']} 답글 등록 실패: {result.get('error')}")
                     
                     results.append(result)
                     
@@ -284,6 +302,8 @@ class BaeminReplyPoster:
     async def _get_pending_reviews(self, platform_store_id: str, user_id: str, limit: int) -> List[Dict]:
         """답글 등록이 필요한 리뷰 조회"""
         try:
+            from datetime import datetime
+            
             # platform_stores 테이블에서 UUID 조회
             store_result = self.supabase.table('platform_stores').select('id').eq(
                 'platform_store_id', platform_store_id
@@ -295,34 +315,140 @@ class BaeminReplyPoster:
             
             platform_store_uuid = store_result.data['id']
             
+            # 현재 시각
+            current_time = datetime.now()
+            print(f"[BAEMIN] 현재 시각: {current_time.isoformat()}")
+            
             # AI 답글이 생성되었지만 아직 등록되지 않은 리뷰 조회
+            # schedulable_reply_date 필드도 포함
             reviews_result = self.supabase.table('reviews_baemin').select(
-                'id, baemin_review_id, reviewer_name, review_text, reply_text, reply_status'
+                'id, baemin_review_id, reviewer_name, review_text, reply_text, reply_status, schedulable_reply_date'
             ).eq(
                 'platform_store_id', platform_store_uuid
             ).eq(
                 'reply_status', 'draft'  # AI 답글 생성됨
             ).neq(
                 'reply_text', None  # 답글 텍스트 있음
-            ).limit(limit).execute()
+            ).limit(limit * 2).execute()  # 스킵될 리뷰를 고려하여 더 많이 조회
             
             if not reviews_result.data:
                 print("[BAEMIN] 답글 등록 대기 중인 리뷰가 없습니다.")
                 return []
             
-            print(f"[BAEMIN] {len(reviews_result.data)}개의 답글 등록 대기 리뷰 발견")
-            return reviews_result.data
+            # schedulable_reply_date 체크하여 필터링
+            eligible_reviews = []
+            skipped_reviews = []
+            
+            for review in reviews_result.data:
+                schedulable_date = review.get('schedulable_reply_date')
+                
+                # schedulable_reply_date가 없으면 즉시 처리 가능
+                if not schedulable_date:
+                    eligible_reviews.append(review)
+                    continue
+                
+                # 문자열을 datetime 객체로 변환
+                try:
+                    if isinstance(schedulable_date, str):
+                        # ISO 형식 또는 다양한 형식 처리
+                        if 'T' in schedulable_date:
+                            schedulable_datetime = datetime.fromisoformat(schedulable_date.replace('Z', '+00:00'))
+                            # timezone-aware 날짜를 naive로 변환 (한국 시간 기준)
+                            if schedulable_datetime.tzinfo is not None:
+                                # UTC+9 (한국 시간)로 변환 후 naive로 만들기
+                                from datetime import timezone, timedelta
+                                kst = timezone(timedelta(hours=9))
+                                schedulable_datetime = schedulable_datetime.astimezone(kst).replace(tzinfo=None)
+                        else:
+                            schedulable_datetime = datetime.strptime(schedulable_date, '%Y-%m-%d %H:%M:%S')
+                    else:
+                        schedulable_datetime = schedulable_date
+                    
+                    # 현재 시각과 비교 (둘 다 naive datetime)
+                    if current_time >= schedulable_datetime:
+                        eligible_reviews.append(review)
+                        print(f"[BAEMIN] ✅ 리뷰 {review['baemin_review_id']}: 답글 게시 가능 (예정: {schedulable_date})")
+                    else:
+                        time_diff = schedulable_datetime - current_time
+                        hours_remaining = time_diff.total_seconds() / 3600
+                        skipped_reviews.append(review)
+                        print(f"[BAEMIN] ⏳ 리뷰 {review['baemin_review_id']}: 아직 대기 중 (예정: {schedulable_date}, {hours_remaining:.1f}시간 남음)")
+                        
+                except Exception as e:
+                    print(f"[BAEMIN] ⚠️ 리뷰 {review['baemin_review_id']}: 날짜 파싱 오류 ({schedulable_date}) - 즉시 처리")
+                    eligible_reviews.append(review)
+            
+            # 결과 요약 출력
+            if skipped_reviews:
+                print(f"[BAEMIN] 📊 총 {len(reviews_result.data)}개 중:")
+                print(f"  - 처리 가능: {len(eligible_reviews)}개")
+                print(f"  - 대기 중: {len(skipped_reviews)}개")
+            
+            # limit 적용
+            eligible_reviews = eligible_reviews[:limit]
+            
+            if eligible_reviews:
+                print(f"[BAEMIN] {len(eligible_reviews)}개의 답글 등록 가능한 리뷰 발견")
+            else:
+                print("[BAEMIN] 현재 답글 등록 가능한 리뷰가 없습니다 (모두 대기 중)")
+            
+            # 최종 요약 로그
+            if skipped_reviews:
+                print(f"[BAEMIN] 📋 schedulable_reply_date 필터링 결과:")
+                print(f"    - 전체 조회: {len(reviews_result.data)}개")
+                print(f"    - 즉시 처리: {len(eligible_reviews)}개")
+                print(f"    - 예약 대기: {len(skipped_reviews)}개")
+            
+            return eligible_reviews
             
         except Exception as e:
             print(f"[BAEMIN] 리뷰 조회 중 오류: {str(e)}")
             return []
     
-    async def _post_single_reply(self, page: Page, baemin_review_id: str, reply_text: str) -> Dict:
+    def check_forbidden_words(self, text: str) -> List[str]:
+        """텍스트에서 금지어 검출"""
+        found_words = []
+        text_lower = text.lower()
+        for word in self.forbidden_words:
+            if word.lower() in text_lower:
+                found_words.append(word)
+        return found_words
+    
+    def filter_forbidden_words(self, text: str) -> str:
+        """[DEPRECATED] 금지어를 대체 문자로 변경 - 더 이상 사용하지 않음
+        
+        사용자 요청에 따라 자동 치환 대신 실패 처리 후 
+        다음 답글 생성 시 AI가 개선된 답글을 작성하도록 변경됨
+        """
+        filtered_text = text
+        replacements = {
+            '요기요': '타 플랫폼',
+            'yogiyo': '타 플랫폼',
+            '쿠팡이츠': '타 배달앱',
+            'coupangeats': '타 배달앱',
+            '쿠팡잇츠': '타 배달앱',
+            '쿠팡 이츠': '타 배달앱',
+            '배달요': '타 서비스',
+            '네이버': '타 플랫폼',
+            'naver': '타 플랫폼',
+        }
+        
+        for forbidden, replacement in replacements.items():
+            # 대소문자 구분 없이 치환
+            import re
+            pattern = re.compile(re.escape(forbidden), re.IGNORECASE)
+            filtered_text = pattern.sub(replacement, filtered_text)
+        
+        return filtered_text
+    
+    async def _post_single_reply(self, page: Page, baemin_review_id: str, reply_text: str, review: Dict = None) -> Dict:
         """개별 리뷰에 답글 등록"""
         try:
             print(f"\n{'='*60}")
             print(f"[BAEMIN] 🎯 리뷰 ID: {baemin_review_id} 처리 시작")
             print(f"[BAEMIN] 📝 답글 내용: '{reply_text[:100]}{'...' if len(reply_text) > 100 else ''}'")
+            
+            # 사전 체크 제거 - 배민이 직접 검증하도록 함
             print(f"{'='*60}")
             
             # 1. 해당 리뷰 찾기
@@ -849,9 +975,116 @@ class BaeminReplyPoster:
             await submit_button.click()
             print(f"[BAEMIN]    ✓ 등록 버튼 클릭 완료")
             
-            # 등록 완료 대기 (성공한 다른 코드 방식: 3초)
-            print(f"[BAEMIN]    ⏳ 등록 완료 대기 중...")
-            await page.wait_for_timeout(3000)  # 2초→3초로 증가
+            # 등록 완료 대기 (금지어 팝업 체크를 위해 짧게)
+            print(f"[BAEMIN]    ⏳ 등록 처리 대기 중...")
+            await page.wait_for_timeout(1500)  # 1.5초 대기
+            
+            # 7-1. 금지어 팝업 체크
+            print(f"[BAEMIN] 🔍 금지어 팝업 확인 중...")
+            forbidden_popup = await page.query_selector('div[role="alertdialog"]')
+            
+            if forbidden_popup:
+                print(f"[BAEMIN] ⚠️ 금지어 팝업 감지!")
+                
+                # 배민 팝업 메시지 정확히 추출
+                popup_message = "배민 금지어 팝업 감지"  # 기본값
+                detected_forbidden_word = None
+                
+                try:
+                    # 팝업에서 정확한 메시지 추출
+                    popup_text = await forbidden_popup.text_content()
+                    if popup_text:
+                        print(f"[BAEMIN] 📝 배민 팝업 전체 내용: {popup_text.strip()}")
+                        
+                        # 배민 팝업 메시지 패턴: "'요기요' 키워드는 입력하실 수 없습니다. 다른 문구로 변경해 주세요."
+                        import re
+                        
+                        # 패턴 1: '단어' 키워드는 입력하실 수 없습니다
+                        pattern1 = r"'([^']+)'\s*키워드는\s*입력하실\s*수\s*없습니다"
+                        match = re.search(pattern1, popup_text)
+                        
+                        if match:
+                            detected_forbidden_word = match.group(1)
+                            # 배민의 정확한 메시지를 그대로 저장
+                            full_message = popup_text.strip()
+                            popup_message = f"배민 금지어 알림: {full_message[:150]}"
+                            print(f"[BAEMIN] 🚨 배민이 금지한 단어: '{detected_forbidden_word}'")
+                            print(f"[BAEMIN] 📄 배민 메시지: {full_message}")
+                        else:
+                            # 패턴을 못 찾으면 전체 메시지 저장
+                            popup_message = f"배민 금지어 팝업: {popup_text.strip()[:150]}"
+                            print(f"[BAEMIN] ⚠️ 알 수 없는 팝업 형식, 전체 메시지 저장")
+                    
+                except Exception as e:
+                    print(f"[BAEMIN] 팝업 메시지 추출 실패: {str(e)}")
+                    popup_message = f"팝업 메시지 추출 오류: {str(e)}"
+                
+                # 확인 버튼 클릭
+                try:
+                    print(f"[BAEMIN] 🔘 팝업 확인 버튼 찾는 중...")
+                    
+                    # 여러 가능한 확인 버튼 선택자
+                    confirm_selectors = [
+                        'div[role="alertdialog"] button:has-text("확인")',
+                        'button:has-text("확인")',
+                        'div.Dialog_b_dvcv_3pnjmu4 button:has-text("확인")',
+                        'button[data-atelier-component="Button"]:has-text("확인")',
+                        'button.Button_b_dvcv_1w1nucha:has-text("확인")'
+                    ]
+                    
+                    confirm_button = None
+                    for selector in confirm_selectors:
+                        confirm_button = await forbidden_popup.query_selector(selector)
+                        if not confirm_button:
+                            confirm_button = await page.query_selector(selector)
+                        if confirm_button:
+                            print(f"[BAEMIN] ✅ 확인 버튼 발견: {selector}")
+                            break
+                    
+                    if confirm_button:
+                        await confirm_button.click()
+                        print(f"[BAEMIN] ✓ 확인 버튼 클릭 완료")
+                        await page.wait_for_timeout(1000)
+                    else:
+                        print(f"[BAEMIN] ⚠️ 확인 버튼을 찾을 수 없음 - ESC 키로 닫기 시도")
+                        await page.keyboard.press('Escape')
+                        await page.wait_for_timeout(1000)
+                    
+                except Exception as e:
+                    print(f"[BAEMIN] 확인 버튼 클릭 실패: {str(e)}")
+                
+                # DB에 배민의 정확한 팝업 메시지 저장
+                if review:
+                    await self._update_reply_status(
+                        review['id'],
+                        'failed',
+                        failure_reason=popup_message
+                    )
+                    print(f"[BAEMIN] 💾 DB 저장 완료: failure_reason = '{popup_message[:100]}...'")
+                
+                    # 추가로 원본 답글과 함께 상세 로그
+                    if detected_forbidden_word:
+                        print(f"[BAEMIN] 📊 상세 정보:")
+                        print(f"    - 원본 답글: {reply_text[:50]}...")
+                        print(f"    - 금지 단어: '{detected_forbidden_word}'")
+                        print(f"    - 다음 AI 생성 시 이 정보를 참고하여 답글 재작성 예정")
+                
+                print(f"\n{'='*60}")
+                print(f"[BAEMIN] ❌ 리뷰 {baemin_review_id} 배민 금지어로 인한 답글 등록 실패")
+                print(f"[BAEMIN] 📝 배민 메시지: {popup_message}")
+                print(f"[BAEMIN] 🔄 main.py 다음 실행 시 이 정보를 바탕으로 새 답글 생성됩니다")
+                print(f"{'='*60}\n")
+                
+                return {
+                    'success': False,
+                    'review_id': baemin_review_id,
+                    'error': f'Baemin forbidden word popup: {popup_message}',
+                    'detected_word': detected_forbidden_word
+                }
+            
+            # 금지어 팝업이 없으면 성공 대기
+            print(f"[BAEMIN]    ✅ 금지어 팝업 없음 - 정상 처리")
+            await page.wait_for_timeout(1500)  # 추가 1.5초 대기 (총 3초)
             print(f"[BAEMIN]    ✅ 등록 완료 대기 완료")
             
             # 8. 성공 확인
@@ -905,7 +1138,7 @@ class BaeminReplyPoster:
                 'error': str(e)
             }
     
-    async def _update_reply_status(self, review_id: str, status: str, reply_text: str = None):
+    async def _update_reply_status(self, review_id: str, status: str, reply_text: str = None, failure_reason: str = None):
         """리뷰 답글 상태 업데이트"""
         try:
             update_data = {
@@ -916,14 +1149,144 @@ class BaeminReplyPoster:
             if status == 'sent':
                 update_data['reply_posted_at'] = datetime.now().isoformat()
             
+            # 실패 상태일 때 failure_reason 저장
+            if status == 'failed' and failure_reason:
+                update_data['failure_reason'] = failure_reason
+            
             self.supabase.table('reviews_baemin').update(
                 update_data
             ).eq('id', review_id).execute()
             
             print(f"[BAEMIN] 리뷰 {review_id} 상태 업데이트: {status}")
+            if failure_reason:
+                print(f"[BAEMIN] 실패 사유 저장: {failure_reason}")
             
         except Exception as e:
             print(f"[BAEMIN] 상태 업데이트 실패: {str(e)}")
+
+    async def _close_popup_if_exists(self, page) -> bool:
+        """배민 팝업/다이얼로그 닫기 (baemin_review_crawler.py에서 가져온 로직)"""
+        try:
+            print("🔍 배민 팝업 확인 중...")
+            
+            # 다양한 팝업 닫기 버튼 셀렉터들 (우선순위 순서로)
+            close_selectors = [
+                # 1. aria-label이 '닫기'인 버튼 (가장 정확)
+                'button[aria-label="닫기"]',
+                
+                # 2. IconButton 클래스와 닫기 아이콘을 가진 버튼
+                'button.IconButton_b_dvcv_uw474i2[aria-label="닫기"]',
+                
+                # 3. Dialog 내의 닫기 버튼들
+                'div[role="dialog"] button[aria-label="닫기"]',
+                'div.Dialog_b_dvcv_3pnjmu4 button[aria-label="닫기"]',
+                
+                # 4. OverlayHeader 내의 닫기 버튼
+                'div.OverlayHeader_b_dvcv_5xyph30 button[aria-label="닫기"]',
+                
+                # 5. X 모양 SVG가 있는 버튼들
+                'button:has(svg path[d*="20.42 4.41081"])',
+                'button:has(svg path[d*="M20.42"])',
+                
+                # 6. 일반적인 닫기 버튼 패턴들
+                'button[data-atelier-component="IconButton"][aria-label="닫기"]',
+                '[data-testid="close-button"]',
+                '[data-testid="modal-close"]',
+                '.close-button',
+                '.modal-close',
+                '.dialog-close',
+                
+                # 7. 백업 셀렉터들
+                'button:has(svg):has(path[d*="4.41081"])',  # X 아이콘 SVG
+                'div[role="dialog"] button:first-child',     # 다이얼로그의 첫 번째 버튼
+            ]
+            
+            for i, selector in enumerate(close_selectors, 1):
+                try:
+                    print(f"   시도 {i}: {selector}")
+                    
+                    # 팝업이 있는지 확인
+                    close_button = await page.query_selector(selector)
+                    
+                    if close_button:
+                        # 버튼이 보이는지 확인
+                        is_visible = await close_button.is_visible()
+                        if is_visible:
+                            # 클릭 시도
+                            await close_button.click()
+                            await page.wait_for_timeout(1000)
+                            
+                            print(f"✅ 배민 팝업 닫기 성공: {selector}")
+                            
+                            # 팝업이 실제로 사라졌는지 확인
+                            popup_gone = await page.query_selector('div[role="dialog"]')
+                            if not popup_gone:
+                                print("✅ 팝업 완전 제거 확인됨")
+                                return True
+                            else:
+                                print("⚠️ 팝업이 여전히 존재함, 다른 방법 시도")
+                        else:
+                            print(f"   버튼이 보이지 않음: {selector}")
+                    
+                except Exception as e:
+                    print(f"   셀렉터 {selector} 실패: {str(e)}")
+                    continue
+            
+            # 2차 시도: JavaScript로 강제 닫기
+            try:
+                print("🔧 JavaScript로 팝업 강제 닫기 시도...")
+                
+                await page.evaluate("""
+                    // 1. role="dialog"인 요소들 모두 제거
+                    const dialogs = document.querySelectorAll('div[role="dialog"]');
+                    dialogs.forEach(dialog => {
+                        console.log('Removing dialog:', dialog);
+                        dialog.remove();
+                    });
+                    
+                    // 2. 오버레이/백드롭 제거
+                    const overlays = document.querySelectorAll('div[class*="overlay"], div[class*="backdrop"], div[class*="modal"]');
+                    overlays.forEach(overlay => {
+                        if (overlay.style.position === 'fixed' || overlay.style.zIndex > 1000) {
+                            console.log('Removing overlay:', overlay);
+                            overlay.remove();
+                        }
+                    });
+                    
+                    // 3. body 스크롤 복원
+                    document.body.style.overflow = 'auto';
+                    
+                    console.log('JavaScript popup removal completed');
+                """)
+                
+                await page.wait_for_timeout(1000)
+                print("✅ JavaScript로 팝업 강제 제거 완료")
+                return True
+                
+            except Exception as e:
+                print(f"JavaScript 팝업 제거 실패: {str(e)}")
+            
+            # 3차 시도: ESC 키로 닫기
+            try:
+                print("⌨️ ESC 키로 팝업 닫기 시도...")
+                await page.keyboard.press('Escape')
+                await page.wait_for_timeout(1000)
+                
+                # 팝업이 사라졌는지 확인
+                popup_exists = await page.query_selector('div[role="dialog"]')
+                if not popup_exists:
+                    print("✅ ESC 키로 팝업 닫기 성공")
+                    return True
+                    
+            except Exception as e:
+                print(f"ESC 키 팝업 닫기 실패: {str(e)}")
+            
+            print("⚠️ 모든 팝업 닫기 시도 실패 (무시하고 계속 진행)")
+            return False
+            
+        except Exception as e:
+            print(f"팝업 닫기 중 오류 (무시하고 계속 진행): {str(e)}")
+            return False
 
 
 async def main():

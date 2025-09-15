@@ -40,6 +40,7 @@ interface Store {
   closingTemplate: string
   seoKeywords: string[]
   autoApprovalDelayHours: number
+  operationType: 'delivery_only' | 'dine_in_only' | 'takeout_only' | 'both'
 }
 
 interface ReplySettings {
@@ -52,6 +53,7 @@ interface ReplySettings {
   closingTemplate: string
   seoKeywords: string[]
   autoApprovalDelayHours: number
+  operationType: 'delivery_only' | 'dine_in_only' | 'takeout_only' | 'both'
 }
 
 export default function ReplySettingsPage() {
@@ -73,7 +75,8 @@ export default function ReplySettingsPage() {
     greetingTemplate: '',
     closingTemplate: '',
     seoKeywords: [],
-    autoApprovalDelayHours: 48
+    autoApprovalDelayHours: 48,
+    operationType: 'both'
   })
 
   // 사용자의 매장 목록 로드
@@ -109,7 +112,11 @@ export default function ReplySettingsPage() {
       const data = await response.json()
       
       if (data.success && data.settings) {
-        setSettings(data.settings)
+        setSettings({
+          ...data.settings,
+          seoKeywords: data.settings.seoKeywords || [],
+          operationType: data.settings.operationType || 'both'
+        })
       }
     } catch (error) {
       console.error('매장 설정 로드 실패:', error)
@@ -122,8 +129,9 @@ export default function ReplySettingsPage() {
         brandVoice: store.brandVoice,
         greetingTemplate: store.greetingTemplate,
         closingTemplate: store.closingTemplate,
-        seoKeywords: store.seoKeywords,
-        autoApprovalDelayHours: store.autoApprovalDelayHours
+        seoKeywords: store.seoKeywords || [],
+        autoApprovalDelayHours: store.autoApprovalDelayHours,
+        operationType: store.operationType || 'both'
       })
     } finally {
       setLoading(false)
@@ -132,11 +140,22 @@ export default function ReplySettingsPage() {
 
   // 설정 저장
   const handleSave = async () => {
-    if (!selectedStore) return
+    if (!selectedStore) {
+      console.error('[FRONTEND DEBUG] selectedStore가 없음')
+      return
+    }
+    
+    console.log('[FRONTEND DEBUG] ===== 설정 저장 시작 =====')
+    console.log('[FRONTEND DEBUG] selectedStore:', selectedStore)
+    console.log('[FRONTEND DEBUG] 전송할 settings:', settings)
+    console.log('[FRONTEND DEBUG] operationType 값:', settings.operationType)
     
     setSaving(true)
     try {
-      const response = await fetch(`http://localhost:8002/api/reply-settings/${selectedStore.id}`, {
+      const requestUrl = `http://localhost:8002/api/reply-settings/${selectedStore.id}`
+      console.log('[FRONTEND DEBUG] 요청 URL:', requestUrl)
+      
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -144,18 +163,29 @@ export default function ReplySettingsPage() {
         body: JSON.stringify(settings)
       })
       
+      console.log('[FRONTEND DEBUG] HTTP 응답 상태:', response.status)
+      console.log('[FRONTEND DEBUG] HTTP 응답 OK:', response.ok)
+      
       const data = await response.json()
+      console.log('[FRONTEND DEBUG] 서버 응답 데이터:', data)
       
       if (data.success) {
+        console.log('[FRONTEND DEBUG] 저장 성공!')
+        console.log('[FRONTEND DEBUG] 업데이트된 operation_type:', data.updated_operation_type)
+        
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
         // 매장 목록 새로고침
-        loadStores()
+        await loadStores()
+        
+        console.log('[FRONTEND DEBUG] ===== 설정 저장 완료 =====')
       } else {
-        alert('설정 저장에 실패했습니다.')
+        console.error('[FRONTEND DEBUG] 서버에서 실패 응답:', data)
+        alert(`설정 저장에 실패했습니다: ${data.message || '알 수 없는 오류'}`)
       }
     } catch (error) {
-      console.error('설정 저장 실패:', error)
+      console.error('[FRONTEND DEBUG] 설정 저장 실패:', error)
+      console.error('[FRONTEND DEBUG] 에러 상세:', error instanceof Error ? error.message : String(error))
       alert('설정 저장 중 오류가 발생했습니다.')
     } finally {
       setSaving(false)
@@ -164,10 +194,11 @@ export default function ReplySettingsPage() {
 
   // 키워드 추가
   const addKeyword = () => {
-    if (newKeyword.trim() && !settings.seoKeywords.includes(newKeyword.trim())) {
+    const keywords = settings.seoKeywords || []
+    if (newKeyword.trim() && !keywords.includes(newKeyword.trim())) {
       setSettings(prev => ({
         ...prev,
-        seoKeywords: [...prev.seoKeywords, newKeyword.trim()]
+        seoKeywords: [...keywords, newKeyword.trim()]
       }))
       setNewKeyword('')
     }
@@ -177,7 +208,7 @@ export default function ReplySettingsPage() {
   const removeKeyword = (keyword: string) => {
     setSettings(prev => ({
       ...prev,
-      seoKeywords: prev.seoKeywords.filter(k => k !== keyword)
+      seoKeywords: (prev.seoKeywords || []).filter(k => k !== keyword)
     }))
   }
 
@@ -204,14 +235,63 @@ export default function ReplySettingsPage() {
     )
   }
 
-  // 답글 톤 예시
-  const getToneExample = (tone: string) => {
-    const examples = {
-      friendly: '안녕하세요! 소중한 리뷰 남겨주셔서 정말 감사합니다 😊 앞으로도 더욱 맛있는 음식과 친절한 서비스로 보답하겠습니다!',
-      formal: '안녕하세요. 귀하의 소중한 리뷰에 깊이 감사드립니다. 앞으로도 품질 높은 서비스를 제공하도록 최선을 다하겠습니다.',
-      casual: '와! 리뷰 고마워요~ 다음에도 또 놀러와 주세요! 더 맛있게 해드릴게요 ㅎㅎ'
+  // 운영 방식 아이콘 및 이름
+  const getOperationTypeBadge = (operationType: string) => {
+    const types = {
+      delivery_only: { name: '🚚 배달전용', color: 'bg-blue-100 text-blue-800' },
+      dine_in_only: { name: '🏪 홀전용', color: 'bg-green-100 text-green-800' },
+      takeout_only: { name: '📦 포장전용', color: 'bg-orange-100 text-orange-800' },
+      both: { name: '🏪🚚 배달+홀', color: 'bg-purple-100 text-purple-800' }
     }
-    return examples[tone as keyof typeof examples] || ''
+    
+    const type = types[operationType as keyof typeof types] || { name: '🏪🚚 배달+홀', color: 'bg-gray-100 text-gray-800' }
+    
+    return (
+      <Badge className={`${type.color} text-xs`}>
+        {type.name}
+      </Badge>
+    )
+  }
+
+  // 운영 방식 설명
+  const getOperationTypeDescription = (operationType: string) => {
+    const descriptions = {
+      delivery_only: '배달만 가능한 매장입니다. 답글에서 "방문" 관련 표현을 사용하지 않습니다.',
+      dine_in_only: '매장 내 식사만 가능한 매장입니다. 답글에서 "배달" 관련 표현을 사용하지 않습니다.',
+      takeout_only: '포장 주문만 가능한 매장입니다. 답글에서 배달/홀 관련 표현을 사용하지 않습니다.',
+      both: '배달과 매장 내 식사가 모두 가능한 매장입니다. 상황에 맞는 표현을 사용합니다.'
+    }
+    
+    return descriptions[operationType as keyof typeof descriptions] || descriptions.both
+  }
+
+  // 답글 톤 예시 (운영 방식별)
+  const getToneExample = (tone: string, operationType: string) => {
+    const examples = {
+      friendly: {
+        delivery_only: '안녕하세요! 소중한 리뷰 남겨주셔서 정말 감사합니다 😊 다음에도 맛있는 음식으로 찾아뵐게요!',
+        dine_in_only: '안녕하세요! 소중한 리뷰 남겨주셔서 정말 감사합니다 😊 다음에도 매장에서 뵙겠습니다!',
+        takeout_only: '안녕하세요! 소중한 리뷰 남겨주셔서 정말 감사합니다 😊 다음 포장도 기다릴게요!',
+        both: '안녕하세요! 소중한 리뷰 남겨주셔서 정말 감사합니다 😊 앞으로도 더욱 맛있는 음식과 친절한 서비스로 보답하겠습니다!'
+      },
+      formal: {
+        delivery_only: '안녕하세요. 귀하의 소중한 리뷰에 깊이 감사드립니다. 앞으로도 더 나은 서비스로 찾아뵐게요.',
+        dine_in_only: '안녕하세요. 귀하의 소중한 리뷰에 깊이 감사드립니다. 다음에도 매장에서 뵙겠습니다.',
+        takeout_only: '안녕하세요. 귀하의 소중한 리뷰에 깊이 감사드립니다. 앞으로도 포장 서비스에 최선을 다하겠습니다.',
+        both: '안녕하세요. 귀하의 소중한 리뷰에 깊이 감사드립니다. 앞으로도 품질 높은 서비스를 제공하도록 최선을 다하겠습니다.'
+      },
+      casual: {
+        delivery_only: '와! 리뷰 고마워요~ 다음에도 맛있게 배달해드릴게요! ㅎㅎ',
+        dine_in_only: '와! 리뷰 고마워요~ 다음에도 또 놀러와 주세요! 더 맛있게 해드릴게요 ㅎㅎ',
+        takeout_only: '와! 리뷰 고마워요~ 다음 포장도 기다리고 있을게요! ㅎㅎ',
+        both: '와! 리뷰 고마워요~ 다음에도 또 이용해주세요! 더 맛있게 해드릴게요 ㅎㅎ'
+      }
+    }
+    
+    const toneExamples = examples[tone as keyof typeof examples]
+    if (!toneExamples) return ''
+    
+    return toneExamples[operationType as keyof typeof toneExamples] || toneExamples.both
   }
 
   useEffect(() => {
@@ -318,6 +398,10 @@ export default function ReplySettingsPage() {
                       <p className="text-sm text-gray-600 mb-2">
                         ID: {store.platform_store_id}
                       </p>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-gray-500">운영 방식</span>
+                        {getOperationTypeBadge(store.operationType)}
+                      </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-500">
                           AI 답글
@@ -419,6 +503,29 @@ export default function ReplySettingsPage() {
                           </div>
                         </div>
 
+                        <div className="space-y-2">
+                          <Label>매장 운영 방식</Label>
+                          <Select
+                            value={settings.operationType}
+                            onValueChange={(value: any) => 
+                              setSettings(prev => ({ ...prev, operationType: value }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="delivery_only">🚚 배달전용</SelectItem>
+                              <SelectItem value="dine_in_only">🏪 홀전용 (매장 내 식사만)</SelectItem>
+                              <SelectItem value="takeout_only">📦 포장전용</SelectItem>
+                              <SelectItem value="both">🏪🚚 배달+홀 (둘 다 가능)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-sm text-muted-foreground">
+                            {getOperationTypeDescription(settings.operationType)}
+                          </p>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>최소 답글 길이 (글자수)</Label>
@@ -458,16 +565,23 @@ export default function ReplySettingsPage() {
                     {/* 답글 톤 미리보기 */}
                     <Card>
                       <CardHeader>
-                        <CardTitle>답글 톤 미리보기</CardTitle>
+                        <CardTitle>답글 톤 및 운영 방식별 미리보기</CardTitle>
                         <CardDescription>
-                          선택한 톤에 따른 답글 예시를 확인하세요
+                          선택한 톤과 운영 방식에 따른 답글 예시를 확인하세요
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <p className="text-sm leading-relaxed">
-                            {getToneExample(settings.replyTone)}
-                          </p>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <span>현재 설정:</span>
+                            <Badge variant="outline">{settings.replyTone === 'friendly' ? '친근함' : settings.replyTone === 'formal' ? '정중함' : '캐주얼'}</Badge>
+                            {getOperationTypeBadge(settings.operationType)}
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-sm leading-relaxed">
+                              {getToneExample(settings.replyTone, settings.operationType)}
+                            </p>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -554,7 +668,7 @@ export default function ReplySettingsPage() {
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          {settings.seoKeywords.map((keyword) => (
+                          {(settings.seoKeywords || []).map((keyword) => (
                             <Badge 
                               key={keyword} 
                               variant="secondary"

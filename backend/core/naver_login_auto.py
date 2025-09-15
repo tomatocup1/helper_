@@ -247,17 +247,9 @@ class NaverAutoLogin:
             browser, playwright = await self._setup_browser_context(profile_path)
             page = browser.pages[0] if browser.pages else await browser.new_page()
             
-            # 기존 세션 확인 (참고용)
+            # 최적화: 불필요한 세션 확인 과정 제거 - 직접 로그인 진행
             has_existing_session = False
-            if not self.force_fresh_login:
-                session_check = await self._check_existing_session(page)
-                has_existing_session = session_check['success']
-                if has_existing_session:
-                    print("기존 세션 감지됨 - 기기등록 건너뛰기 모드로 로그인 진행")
-                else:
-                    print("기존 세션 없음 - 전체 로그인 과정 진행")
-            else:
-                print("강제 새 로그인 모드 - 기존 세션 확인 건너뜀")
+            print("최적화된 로그인 모드 - 직접 로그인 페이지로 이동")
             
             print("새 로그인 시도...")
             
@@ -265,14 +257,10 @@ class NaverAutoLogin:
             current_url = page.url
             print(f"현재 페이지: {current_url}")
             
-            # 이미 로그인 페이지에 있는지 확인
-            if "nid.naver.com" not in current_url:
-                # 로그인 페이지로 이동
-                login_url = "https://nid.naver.com/nidlogin.login?svctype=1&locale=ko_KR&url=https%3A%2F%2Fnew.smartplace.naver.com%2F&area=bbt"
-                print(f"로그인 페이지로 이동: {login_url}")
-                await page.goto(login_url, wait_until='networkidle', timeout=self.timeout)
-            else:
-                print("이미 로그인 페이지에 있음")
+            # 최적화: 항상 로그인 페이지로 직접 이동
+            login_url = "https://nid.naver.com/nidlogin.login?svctype=1&locale=ko_KR&url=https%3A%2F%2Fnew.smartplace.naver.com%2F&area=bbt"
+            print(f"로그인 페이지로 직접 이동: {login_url}")
+            await page.goto(login_url, wait_until='networkidle', timeout=self.timeout)
             
             # 로그인 폼 작성
             await self._fill_login_form(page, platform_id, platform_password)
@@ -377,7 +365,7 @@ class NaverAutoLogin:
             
             # 스마트플레이스 메인 페이지로 이동
             await page.goto("https://new.smartplace.naver.com/", timeout=self.timeout)
-            await page.wait_for_timeout(5000)  # 충분한 대기 시간
+            await page.wait_for_timeout(3000)  # 최적화: 5초 → 3초 단축
             
             current_url = page.url
             print(f"이동 후 URL: {current_url}")
@@ -390,7 +378,7 @@ class NaverAutoLogin:
             # 실제 스마트플레이스 페이지인지 확인
             try:
                 # 더 엄격한 세션 확인: 실제 로그인된 사용자만 접근 가능한 요소 확인
-                await page.wait_for_timeout(3000)
+                await page.wait_for_timeout(2000)  # 최적화: 3초 → 2초 단축
                 
                 # 로그인된 사용자만 볼 수 있는 요소들을 더 구체적으로 확인
                 user_specific_selectors = [

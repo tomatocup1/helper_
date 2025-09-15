@@ -23,9 +23,10 @@ from playwright.async_api import async_playwright, Page, Browser
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-# NaverAutoLogin 클래스 임포트
+# NaverAutoLogin 클래스 및 비밀번호 복호화 임포트
 sys.path.append(os.path.dirname(__file__))
 from naver_login_auto import NaverAutoLogin
+from password_decrypt import decrypt_password
 
 # 환경 변수 로드 (backend 폴더의 .env 파일)
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -172,13 +173,22 @@ class NaverReplyPoster:
                 if isinstance(branding_keywords, str):
                     branding_keywords = json.loads(branding_keywords) if branding_keywords else []
                 
+                # 비밀번호 복호화 (네이버 플랫폼용)
+                try:
+                    decrypted_password = decrypt_password(store_info['platform_pw'], platform='naver')
+                    logger.debug(f"✅ 비밀번호 복호화 성공: {store_info['platform_id']}")
+                except Exception as e:
+                    logger.error(f"❌ 비밀번호 복호화 실패 ({store_info['platform_id']}): {e}")
+                    logger.error(f"   암호화된 데이터: {store_info['platform_pw'][:50]}...")
+                    continue
+                
                 task = ReplyTask(
                     review_id=review['id'],
                     naver_review_id=review['naver_review_id'],
                     store_id=review['platform_store_id'],  # platform_stores.id
                     platform_store_code=store_info['platform_store_id'],  # 실제 네이버 매장 ID
                     platform_id=store_info['platform_id'],
-                    platform_password=store_info['platform_pw'],
+                    platform_password=decrypted_password,
                     reviewer_name=review['reviewer_name'],
                     review_text=review['review_text'],
                     rating=review['rating'] or 3,
@@ -222,11 +232,12 @@ class NaverReplyPoster:
             
             logger.info("로그인 시도 중...")
             
-            # 브라우저 세션을 유지하면서 로그인 (크롤러와 동일한 방식)
+            # 브라우저 세션을 유지하면서 로그인 (매장 크롤링 비활성화)
             result = await auto_login.login(
                 platform_id=platform_id,
                 platform_password=platform_password,
-                keep_browser_open=True
+                keep_browser_open=True,
+                crawl_stores=False  # 답글 포스터는 매장 크롤링 불필요
             )
             
             logger.info(f"로그인 결과: {result}")

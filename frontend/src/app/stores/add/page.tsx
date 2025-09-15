@@ -576,7 +576,7 @@ export default function AddStorePage() {
                   <div>
                     <h3 className="text-lg font-semibold text-red-800">연결 실패</h3>
                     <p className="text-sm text-red-600">
-                      계정 정보를 확인하고 다시 시도해주세요
+                      ID / PW를 확인하고 다시 시도해주세요
                     </p>
                   </div>
                   <Button 

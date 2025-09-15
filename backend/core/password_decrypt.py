@@ -10,15 +10,26 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from dotenv import load_dotenv
 
-def decrypt_password(encrypted_data: str) -> str:
+def decrypt_password(encrypted_data: str, platform: str = 'naver') -> str:
     """
     AES-256-GCM 복호화
     형식: iv:authTag:encrypted
     """
     try:
-        # 환경변수에서 암호화 키 가져오기
+        # 환경변수에서 플랫폼별 암호화 키 가져오기
         load_dotenv()
-        secret_key = os.getenv('ENCRYPTION_KEY', 'your-32-character-secret-key-here!')
+        
+        # 플랫폼별 암호화 키 선택 (플랫폼별 키가 없으면 ENCRYPTION_KEY 사용)
+        if platform == 'naver':
+            secret_key = os.getenv('NAVER_ENCRYPTION_KEY') or os.getenv('ENCRYPTION_KEY', 'your-32-character-secret-key-here!')
+        elif platform == 'baemin':
+            secret_key = os.getenv('BAEMIN_ENCRYPTION_KEY') or os.getenv('ENCRYPTION_KEY', 'your-32-character-secret-key-here!')
+        elif platform == 'coupangeats':
+            secret_key = os.getenv('COUPANGEATS_ENCRYPTION_KEY') or os.getenv('ENCRYPTION_KEY', 'your-32-character-secret-key-here!')
+        elif platform == 'yogiyo':
+            secret_key = os.getenv('YOGIYO_ENCRYPTION_KEY') or os.getenv('ENCRYPTION_KEY', 'your-32-character-secret-key-here!')
+        else:
+            secret_key = os.getenv('ENCRYPTION_KEY', 'your-32-character-secret-key-here!')
         
         # 암호화된 데이터 파싱
         parts = encrypted_data.split(':')

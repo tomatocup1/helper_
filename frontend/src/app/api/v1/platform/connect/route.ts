@@ -386,7 +386,7 @@ async function runNaverCrawler(platform_id: string, platform_password: string): 
 async function runBaeminCrawler(platform_id: string, platform_password: string, user_id: string): Promise<CrawlerResult> {
   try {
     // 백엔드 비동기 크롤링 서비스 호출
-    const backendResponse = await fetch('http://127.0.0.1:8001/api/v1/platform/connect', {
+    const backendResponse = await fetch('http://127.0.0.1:8002/api/v1/platform/connect', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -470,7 +470,7 @@ async function runBaeminCrawler(platform_id: string, platform_password: string, 
 async function runYogiyoCrawler(platform_id: string, platform_password: string): Promise<CrawlerResult> {
   try {
     // 백엔드 비동기 크롤링 서비스 호출
-    const backendResponse = await fetch('http://127.0.0.1:8001/api/v1/platform/connect', {
+    const backendResponse = await fetch('http://127.0.0.1:8002/api/v1/platform/connect', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -522,7 +522,7 @@ async function runYogiyoCrawler(platform_id: string, platform_password: string):
 async function runCoupangEatsCrawler(platform_id: string, platform_password: string, user_id: string): Promise<CrawlerResult> {
   try {
     // 백엔드 비동기 크롤링 서비스 호출 - 새로운 엔드포인트 사용
-    const backendResponse = await fetch('http://127.0.0.1:8001/api/v1/platform/connect', {
+    const backendResponse = await fetch('http://127.0.0.1:8002/api/v1/platform/connect', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -85,7 +85,7 @@ async def main():
         print(f"매장: {store_name} (ID: {store_id})")
         print(f"{'='*50}")
         
-        # 답글 대기 리뷰 확인
+        # 답글 대기 리뷰 확인 (AI가 답글을 생성한 리뷰)
         reviews_result = supabase.table('reviews_baemin')\
             .select('id, baemin_review_id, reviewer_name, rating')\
             .eq('platform_store_id', store_uuid)\

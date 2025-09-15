@@ -1,0 +1,7 @@
+# NoDriver-based Coupang Crawler Dependencies
+nodriver>=0.34.1  # Latest undetected Chrome automation
+asyncio-throttle>=1.0.2  # Rate limiting for natural behavior
+pynput>=1.7.6  # OS-level input simulation
+psutil>=5.9.0  # Process monitoring
+aiofiles>=23.2.1  # Async file operations
+fake-useragent>=1.5.1  # Dynamic user agent rotation

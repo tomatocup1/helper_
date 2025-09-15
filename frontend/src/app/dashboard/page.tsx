@@ -68,7 +68,7 @@ export default function DashboardPage() {
       setLoading(true)
       setError(null)
       
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001'
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
       const response = await fetch(`${backendUrl}/api/v1/dashboard/stats`)
       
       if (!response.ok) {

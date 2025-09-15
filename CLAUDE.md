@@ -28,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Backend**: Python FastAPI, Playwright for crawling
 - **Database**: Supabase (PostgreSQL)
 - **AI**: OpenAI GPT-4o-mini for review replies
-- **Infrastructure**: Docker, proxy server for unified port (4000)
+- **Infrastructure**: Docker, proxy server for unified port (3000)
 
 ### Project Structure
 ```

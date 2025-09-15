@@ -22,6 +22,7 @@ load_dotenv()
 
 # 멀티플랫폼 어댑터 시스템 임포트
 from platform_adapters import MultiPlatformManager, Platform, UnifiedReview, parse_platform_list
+from korean_reply_system import KoreanReplyGenerator, ReviewPriority, KoreanTone
 
 
 class ReplyStatus(Enum):
@@ -106,7 +107,10 @@ class AIReplyManager:
         self.openai_client = openai.AsyncOpenAI(api_key=api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
         self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '400'))
-        self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.8'))
+        self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.7'))  # 더 일관된 응답을 위해 낮춤
+        
+        # 한국형 답글 생성기 초기화
+        self.korean_generator = KoreanReplyGenerator()
         
         # Supabase 클라이언트 초기화
         supabase_url = os.getenv('NEXT_PUBLIC_SUPABASE_URL')
@@ -157,6 +161,16 @@ class AIReplyManager:
         if platform not in self.supported_platforms:
             raise ValueError(f"지원하지 않는 플랫폼: {platform}")
         return f"{platform}_metadata"
+    
+    def _get_failure_field(self, platform: str) -> str:
+        """플랫폼별 실패 사유 필드명 반환"""
+        field_mapping = {
+            'naver': 'failure_reason',
+            'baemin': 'failure_reason',
+            'yogiyo': 'reply_error_message',
+            'coupangeats': 'reply_error_message'
+        }
+        return field_mapping.get(platform, 'failure_reason')
     
     def _initialize_risk_indicators(self) -> Dict:
         """위험 지표 초기화 - 실제 클레임/질문/문제 중심"""
@@ -232,32 +246,64 @@ class AIReplyManager:
     # ===== 1. 리뷰 분석 기능 =====
     
     async def analyze_review(self, review_data: Dict, store_settings: Dict) -> ReviewAnalysis:
-        """리뷰 분석 및 위험도 평가"""
+        """리뷰 분석 및 위험도 평가 (AI 기반 승인 판단 통합)"""
         
         review_text = review_data.get('review_text') or ""
-        rating = review_data.get('rating') or 3  # None인 경우 기본값 3점
+        rating = review_data.get('rating') or 3
         
         # 1. 감정 분석
         sentiment, sentiment_score = self._analyze_sentiment(review_text, rating)
         
-        # 2. AI 기반 위험도 평가
-        risk_level, delay_hours, approval_reason = await self._assess_risk_level(review_text, rating)
+        # 2. 한국형 우선순위 평가 (4단계)
+        priority, priority_reason = self.korean_generator.get_priority_level(
+            review_text, rating, store_settings
+        )
         
-        # 3. 승인 필요 여부 결정
-        requires_approval = self._requires_approval(risk_level, sentiment, rating, store_settings)
+        # 3. 기본 위험도 매핑 및 지연 시간 (승인 여부는 AI로 별도 판단)
+        risk_level, delay_hours, _ = self._map_priority_to_settings(
+            priority, store_settings
+        )
         
-        # 4. 키워드 추출
+        # 4. AI 기반 승인 필요 여부 판단
+        try:
+            ai_requires_approval, ai_reason = await self._ai_determine_requires_approval(
+                review_text, rating, review_data, store_settings
+            )
+            approval_reason = f"AI 판단: {ai_reason}"
+        except Exception as e:
+            # AI 판단 실패시 기존 로직 사용
+            self.logger.warning(f"AI 승인 판단 실패, 기존 로직 사용: {e}")
+            _, _, ai_requires_approval = self._map_priority_to_settings(priority, store_settings)
+            approval_reason = f"기존 로직: {priority_reason}"
+        
+        # 5. 키워드 추출
         keywords = self._extract_keywords(review_text)
         
         return ReviewAnalysis(
             sentiment=sentiment,
             sentiment_score=sentiment_score,
             risk_level=risk_level,
-            requires_approval=requires_approval,
+            requires_approval=ai_requires_approval,
             keywords=keywords,
             delay_hours=delay_hours,
             approval_reason=approval_reason
         )
+    
+    def _map_priority_to_settings(self, priority: ReviewPriority, 
+                                 store_settings: Dict) -> Tuple[str, int, bool]:
+        """우선순위를 위험도, 지연시간, 승인필요 여부로 매핑 (단순화된 2단계)"""
+        
+        if priority == ReviewPriority.REQUIRES_APPROVAL:
+            # 사장님 확인 필요: 48시간 후 답글 (모레 00시)
+            return "medium_risk", 48, True
+        
+        elif priority == ReviewPriority.AUTO:
+            # 자동 답글 가능: 24시간 후 답글 (내일 00시)
+            return "low_risk", 24, False
+        
+        else:
+            # 기본값: 안전을 위해 승인 필요로 설정
+            return "medium_risk", 48, True
     
     def _analyze_sentiment(self, review_text: str, rating: int) -> Tuple[str, float]:
         """감정 분석"""
@@ -399,13 +445,15 @@ class AIReplyManager:
         if medium_risk_keywords:
             return "medium_risk", 24, f"질문/요청: {', '.join(medium_risk_keywords)}"
         
-        # 1점 리뷰는 중위험으로 처리
-        if rating == 1:
-            return "medium_risk", 24, "1점 리뷰 (심각한 불만)"
-        
-        # 2점 리뷰는 저위험으로 처리
-        if rating == 2:
-            return "low_risk", 12, "2점 리뷰 (부정적 의견)"
+        # rating이 있는 경우에만 별점 기반 평가
+        if rating is not None:
+            # 1점 리뷰는 중위험으로 처리
+            if rating == 1:
+                return "medium_risk", 24, "1점 리뷰 (심각한 불만)"
+            
+            # 2점 리뷰는 저위험으로 처리
+            if rating == 2:
+                return "low_risk", 12, "2점 리뷰 (부정적 의견)"
         
         return "low_risk", 0, "일반 리뷰"
     
@@ -453,10 +501,95 @@ class AIReplyManager:
         
         return keywords
     
+    async def _ai_determine_requires_approval(self, review_text: str, rating: int, 
+                                            review_data: Dict, store_settings: Dict) -> Tuple[bool, str]:
+        """AI 기반 사장님 확인 필요 여부 판단"""
+        
+        try:
+            # 시스템 프롬프트 구성
+            system_prompt = """
+당신은 온라인 리뷰 관리 전문가입니다. 리뷰 내용을 분석하여 자동 답글 대신 사장님이 직접 확인하고 답변해야 하는지 판단해주세요.
+
+**사장님 확인이 필요한 경우:**
+1. 심각한 불만/클레임 (식중독, 위생 문제, 법적 위험)
+2. 구체적인 질문이나 요청 (메뉴 문의, 예약, 개인적 요청)  
+3. 복잡한 상황 (환불 요구, 특별한 사연, 개인적 경험담)
+4. 1-2점 매우 낮은 평점의 강한 불만
+5. 개인화된 응답이 필요한 특별한 칭찬이나 감사
+
+**자동 답글 가능한 경우:**
+1. 단순한 긍정적 평가 ("맛있어요", "좋아요")
+2. 간단한 부정적 평가 (특별한 조치 불필요)
+3. 표준화된 응답으로 충분한 일반적 의견
+
+응답 형식:
+- requires_approval: true/false
+- reason: 판단 근거 (한 줄로 간단히)
+"""
+
+            # 사용자 프롬프트 구성
+            review_info = []
+            review_info.append(f"평점: {rating}점/5점")
+            if review_text:
+                review_info.append(f"리뷰 내용: {review_text}")
+            else:
+                review_info.append("리뷰 내용: (평점만 남김)")
+            
+            # 추가 컨텍스트 정보
+            platform = review_data.get('platform', 'unknown')
+            review_info.append(f"플랫폼: {platform}")
+            
+            user_prompt = f"""
+다음 리뷰를 분석하여 사장님 확인이 필요한지 판단해주세요:
+
+{chr(10).join(review_info)}
+
+JSON 형식으로 응답해주세요:
+{{
+    "requires_approval": true/false,
+    "reason": "판단 근거"
+}}
+"""
+
+            # OpenAI API 호출
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1,  # 일관성을 위해 낮은 temperature
+                max_tokens=200
+            )
+            
+            # 응답 파싱
+            response_text = response.choices[0].message.content.strip()
+            
+            # JSON 파싱 시도
+            try:
+                import json
+                result = json.loads(response_text)
+                requires_approval = result.get('requires_approval', True)  # 기본값은 True (안전)
+                reason = result.get('reason', 'AI 분석 결과')
+                
+                return requires_approval, reason
+                
+            except json.JSONDecodeError:
+                # JSON 파싱 실패시 텍스트에서 추출 시도
+                if 'false' in response_text.lower() or 'requires_approval": false' in response_text.lower():
+                    return False, "AI 분석: 자동 답글 가능"
+                else:
+                    return True, "AI 분석: 사장님 확인 권장"
+            
+        except Exception as e:
+            self.logger.error(f"AI 승인 판단 실패: {e}")
+            # 오류 발생시 안전하게 승인 필요로 설정
+            return True, f"AI 분석 오류 - 안전을 위해 승인 필요로 설정"
+    
     # ===== 2. AI 답글 생성 기능 =====
     
-    async def generate_reply(self, review_data: Dict, store_settings: Dict) -> ReplyResult:
-        """AI 답글 생성"""
+    async def generate_reply(self, review_data: Dict, store_settings: Dict, platform: str = 'naver') -> ReplyResult:
+        """AI 답글 생성 (한국형 개선)"""
         
         start_time = time.time()
         
@@ -464,26 +597,109 @@ class AIReplyManager:
             # 1. 리뷰 분석
             analysis = await self.analyze_review(review_data, store_settings)
             
-            # 2. AI 답글 생성
-            ai_reply, tokens_used, confidence = await self._generate_ai_body(
-                review_data, store_settings, analysis
+            # 2. 우선순위 판단
+            priority, _ = self.korean_generator.get_priority_level(
+                review_data.get('review_text', ''),
+                review_data.get('rating', 3),
+                store_settings
             )
             
-            # 3. 완전한 답글 구성
-            complete_reply = self._build_complete_reply(ai_reply, store_settings)
+            # 3. OpenAI를 사용한 자연스러운 답글 생성
+            # 우선순위가 높거나 위험한 리뷰는 반드시 AI 사용
+            use_ai = priority == ReviewPriority.REQUIRES_APPROVAL or \
+                    analysis.risk_level in ["high", "critical"] or \
+                    True  # 항상 AI 사용하도록 설정
+            
+            if use_ai:
+                # AI를 사용한 답글 생성
+                ai_reply, tokens_used, confidence = await self._generate_ai_body(
+                    review_data, store_settings, analysis
+                )
+            else:
+                # 템플릿 기반 답글 (폴백)
+                ai_reply = self.korean_generator.generate_long_natural_reply(
+                    review_data, store_settings, analysis.sentiment, priority, platform
+                )
+                confidence = 0.7
+                tokens_used = 0
+            
+            # 6. 완전한 답글 구성
+            complete_reply = self._build_complete_reply(ai_reply, store_settings, review_data)
             
             generation_time = int((time.time() - start_time) * 1000)
             
             return ReplyResult(
                 ai_generated_reply=ai_reply,
                 complete_reply=complete_reply,
-                ai_model_used=self.model,
+                ai_model_used=self.model if use_ai else "korean_template",
                 ai_generation_time_ms=generation_time,
                 ai_confidence_score=confidence
             )
             
         except Exception as e:
             raise Exception(f"AI 답글 생성 실패: {str(e)}")
+    
+    async def _generate_reply_after_failure(self, review_data: Dict, store_settings: Dict, 
+                                           previous_reply: str, failure_reason: str, platform: str) -> ReplyResult:
+        """실패한 답글을 재생성 - DB에 저장된 실패 사유 활용"""
+        
+        start_time = time.time()
+        
+        try:
+            # 실패 사유 분석을 위한 프롬프트
+            prompt = f"""
+이전 답글이 플랫폼에서 거부되었습니다. 실패 정보를 참고하여 새 답글을 작성하세요.
+
+[리뷰 정보]
+- 작성자: {review_data.get('reviewer_name', '고객님')}
+- 평점: {review_data.get('rating', 3)}점
+- 리뷰 내용: {review_data.get('review_text', '')}
+
+[실패한 답글]
+{previous_reply}
+
+[플랫폼 거부 사유]
+{failure_reason}
+
+[재생성 지침]
+1. 실패 사유에 명시된 금지어나 문제 표현을 피하세요
+2. 만약 작성자 닉네임이 문제라면 "고객님"으로 변경
+3. "시 방" 패턴이 생기는 "다시 방문" 대신 "또 찾아", "재방문", "다음에도 이용" 등 사용
+4. 타 플랫폼명(배민, 요기요, 쿠팡 등)은 언급하지 마세요
+5. 이전 답글의 의미는 유지하되 표현을 완전히 바꿔주세요
+
+플랫폼: {platform}
+매장명: {store_settings.get('store_name', '저희 가게')}
+
+새로운 답글을 작성해주세요:"""
+            
+            # OpenAI API 호출
+            response = await self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": f"당신은 {store_settings.get('store_name', '가게')} 사장님입니다. 플랫폼 정책을 이해하고 금지어를 회피하는 답글 전문가입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=self.max_tokens,
+                temperature=0.9  # 다양한 표현을 위해 약간 높게
+            )
+            
+            new_reply = response.choices[0].message.content.strip()
+            generation_time = int((time.time() - start_time) * 1000)
+            
+            # 인사말과 마무리말 추가
+            complete_reply = self._build_complete_reply(new_reply, store_settings, review_data)
+            
+            return ReplyResult(
+                ai_generated_reply=new_reply,
+                complete_reply=complete_reply,
+                ai_model_used=self.model,
+                ai_generation_time_ms=generation_time,
+                ai_confidence_score=0.85  # 재생성은 약간 낮은 신뢰도
+            )
+            
+        except Exception as e:
+            raise Exception(f"답글 재생성 실패: {str(e)}")
     
     async def _generate_ai_body(self, review_data: Dict, store_settings: Dict, 
                                analysis: ReviewAnalysis) -> Tuple[str, int, float]:
@@ -492,16 +708,22 @@ class AIReplyManager:
         prompt = self._build_dynamic_prompt(review_data, store_settings, analysis)
         
         try:
+            # 매장 설정 기반 동적 최대 토큰 수 계산
+            max_length = store_settings.get('max_reply_length', 200)
+            # 한국어 특성상 토큰 수는 글자 수의 약 1.5배 정도로 설정
+            dynamic_max_tokens = min(int(max_length * 1.5), 500)  # 최대 500 토큰으로 제한
+            
             response = await self.openai_client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": self._get_system_prompt(store_settings)},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                presence_penalty=0.6,  # 반복 방지
-                frequency_penalty=0.4   # 새로운 표현 장려
+                max_tokens=dynamic_max_tokens,  # 동적 답글 길이 제한
+                temperature=0.8,  # 더 창의적이고 자연스러운 답변
+                presence_penalty=0.3,  # 적당한 반복 방지
+                frequency_penalty=0.3,  # 다양한 표현 사용
+                top_p=0.95  # 더 다양한 단어 선택
             )
             
             ai_reply = response.choices[0].message.content.strip()
@@ -516,96 +738,329 @@ class AIReplyManager:
             raise Exception(f"OpenAI API 호출 실패: {str(e)}")
     
     def _get_system_prompt(self, store_settings: Dict) -> str:
-        """시스템 프롬프트 생성"""
+        """매장별 설정을 반영한 개인화된 시스템 프롬프트"""
         
-        store_name = store_settings.get('store_name', '저희 매장')
-        business_type = store_settings.get('business_type', '식당')
-        reply_style = store_settings.get('reply_style', 'friendly')
+        # 매장 기본 정보
+        store_name = store_settings.get('store_name', '저희 가게')
+        business_type = store_settings.get('business_type', '가게')
+        operation_type = store_settings.get('operation_type', 'both')  # 매장 운영 방식
         
-        base_prompt = f"""
-당신은 {store_name}의 사장님입니다. 고객 리뷰에 대해 진심어린 답글을 작성해주세요.
+        # 개인화 설정
+        reply_tone = store_settings.get('reply_tone', 'friendly')
+        min_length = store_settings.get('min_reply_length', 50)
+        max_length = store_settings.get('max_reply_length', 200)
+        brand_voice = store_settings.get('brand_voice', '')
+        custom_instructions = store_settings.get('custom_instructions', '')
+        
+        # 톤앤매너별 맞춤 지침
+        tone_instructions = {
+            'friendly': "친근하고 따뜻한 말투로, 이모티콘도 적절히 사용하여",
+            'formal': "정중하고 격식있는 표현으로, 존댓말을 정확히 사용하여",
+            'casual': "편안하고 자연스러운 구어체로, 친구처럼 편하게"
+        }
+        
+        tone_guide = tone_instructions.get(reply_tone, tone_instructions['friendly'])
+        
+        # 운영 방식별 금지 표현
+        operation_restrictions = {
+            'delivery_only': """
+5. [배달전용 매장] 절대 금지 표현:
+   - "방문해주세요", "오셔서", "매장에서", "가게에 오시면" 등 매장 방문 관련 표현 금지
+   - "다음에도 배달로 이용해주세요", "또 주문해주세요" 등으로 대체""",
+            'dine_in_only': """
+5. [홀전용 매장] 절대 금지 표현:
+   - "배달", "배송", "라이더" 등 배달 관련 표현 금지
+   - "매장에서 뵙겠습니다", "방문해주셔서" 등으로 표현""",
+            'takeout_only': """
+5. [포장전용 매장] 절대 금지 표현:
+   - "배달", "홀에서", "매장에서 드시고" 등 배달/홀 관련 표현 금지
+   - "포장 주문", "가져가실 때" 등으로 표현""",
+            'both': """
+5. [배달+홀 매장] 상황에 맞는 표현 사용:
+   - 배달 리뷰: 배달 관련 표현 사용
+   - 방문 리뷰: 매장 방문 관련 표현 사용"""
+        }
+        
+        operation_guide = operation_restrictions.get(operation_type, operation_restrictions['both'])
+        
+        # 기본 프롬프트 구성
+        base_prompt = f"""당신은 "{store_name}" {business_type} 사장님입니다. 실제 한국 소상공인처럼 자연스럽고 진솔한 답글을 작성하세요.
 
-매장 정보:
-- 매장명: {store_name}
-- 업종: {business_type}
-- 답글 스타일: {reply_style}
+답글 스타일: {tone_guide}
+답글 길이: {min_length}-{max_length}자 (한국어 기준)
+매장 운영 방식: {operation_type.replace('_', ' ').title()}
 
-답글 작성 가이드라인:
-1. 진정성 있고 개인적인 톤으로 작성
-2. 구체적인 리뷰 내용에 대해 언급
-3. 감사 인사는 자연스럽게 포함
-4. 재방문 유도는 부담스럽지 않게
-5. 150자 이내로 간결하게
-6. 존댓말 사용
-7. 과도한 약속이나 할인 언급 금지
+[금지어 주의사항 - 매우 중요]
+1. "다시 방문"이라는 표현 금지 → "또 찾아", "재방문", "다음에도 이용" 등으로 대체
+2. 타 플랫폼명 언급 금지 (배민, 요기요, 쿠팡 등)
+3. 리뷰어 닉네임에 문제가 있을 경우 "고객님"으로 호칭
+4. "시 방" 패턴이 생기는 모든 표현 주의
+{operation_guide}
 
-각 답글은 독특하고 개성있게 작성하되, 사장님의 진심이 느껴지도록 해주세요.
+핵심 원칙:
+1. 리뷰 내용에 구체적으로 반응 (리뷰어가 언급한 메뉴, 상황 등을 그대로 언급)
+2. 템플릿 문장 절대 금지
+3. 설정된 길이 범위 내에서 진솔하게 작성
+4. 자연스러운 한국어 구어체 사용
+5. 매장 운영 방식에 맞는 표현만 사용 (배달전용/홀전용/포장전용 구분)"""
+
+        # 브랜드 보이스 추가
+        if brand_voice:
+            base_prompt += f"""
+5. 매장 특성: {brand_voice}"""
+
+        # 톤별 구체적 예시
+        if reply_tone == 'friendly':
+            base_prompt += """
+
+좋은 예시:
+- "닭강정 맛있게 드셨다니 다행이네요 ㅎㅎ"
+- "배달 늦어서 죄송해요 ㅠㅠ 다음엔 더 빨리 보내드릴게요"
+- "별점 감사해요! 덕분에 힘이 나네요"
 """
-        
+        elif reply_tone == 'formal':
+            base_prompt += """
+
+좋은 예시:
+- "소중한 리뷰 남겨주셔서 진심으로 감사드립니다"
+- "불편을 드려 죄송합니다. 즉시 개선하겠습니다"
+- "고객님의 만족을 위해 최선을 다하겠습니다"
+"""
+        elif reply_tone == 'casual':
+            base_prompt += """
+
+좋은 예시:
+- "맛있게 드셨다니 기분 좋네요~"
+- "아 늦어서 미안해요! 다음엔 빨리 보낼게요"
+- "리뷰 고마워요 덕분에 힘이 나요"
+"""
+
+        base_prompt += """
+
+사용 금지:
+× "귀하" "고객님의 소중한 의견" "최선을 다하겠습니다" (formal 톤이 아닌 경우)
+× "앞으로도 변함없는" "더욱 발전하는" 
+× 날씨 관련 인사
+× 과도한 이모티콘이나 느낌표 (formal 톤의 경우)"""
+
+        # 사용자 정의 지침 추가
+        if custom_instructions:
+            base_prompt += f"""
+
+매장 사장님의 특별 지침:
+{custom_instructions}"""
+
         return base_prompt.strip()
     
     def _build_dynamic_prompt(self, review_data: Dict, store_settings: Dict, 
                              analysis: ReviewAnalysis) -> str:
-        """동적 프롬프트 생성"""
+        """SEO 키워드와 브랜드 보이스를 반영한 동적 프롬프트 생성"""
         
-        reviewer_name = review_data.get('reviewer_name', '고객님')
-        review_text = review_data.get('review_text', '')
+        reviewer_name = review_data.get('reviewer_name', '고객')
+        raw_review_text = review_data.get('review_text')
+        # 리뷰 텍스트 처리: None, 빈문자열, 'None' 문자열을 빈문자열로 통일
+        review_text = ''
+        if raw_review_text and str(raw_review_text).strip() and str(raw_review_text).strip().lower() != 'none':
+            review_text = str(raw_review_text).strip()
+        
         rating = review_data.get('rating', 3)
-        review_date = review_data.get('review_date', '')
+        order_menu = review_data.get('order_menu_items', [])
         
-        # 브랜딩 키워드 자연스럽게 포함
-        branding_keywords = store_settings.get('branding_keywords', [])
+        # 개인화 설정
+        min_length = store_settings.get('min_reply_length', 50)
+        max_length = store_settings.get('max_reply_length', 200)
         seo_keywords = store_settings.get('seo_keywords', [])
+        brand_voice = store_settings.get('brand_voice', '')
+        reply_tone = store_settings.get('reply_tone', 'friendly')
+        operation_type = store_settings.get('operation_type', 'both')  # 매장 운영 방식
         
-        prompt_parts = [
-            f"리뷰어: {reviewer_name}",
-            f"평점: {rating}점/5점",
-            f"리뷰 내용: \"{review_text}\"",
-            f"감정: {analysis.sentiment}",
-            f"주요 키워드: {', '.join(analysis.keywords)}"
-        ]
+        # 메뉴 정보 처리
+        menu_str = ""
+        if order_menu and isinstance(order_menu, list):
+            menu_items = [item.get('menu_name', '') for item in order_menu if isinstance(item, dict)]
+            if menu_items:
+                menu_str = f"주문 메뉴: {', '.join(menu_items)}"
         
-        # 감정별 특별 지시사항
+        # SEO 키워드 정보 (자연스럽게 포함할 수 있는 키워드들)
+        seo_context = ""
+        if seo_keywords and isinstance(seo_keywords, list) and len(seo_keywords) > 0:
+            # 빈 문자열이 아닌 키워드만 필터링
+            valid_keywords = [kw.strip() for kw in seo_keywords if kw and kw.strip()]
+            if valid_keywords:
+                seo_context = f"""
+
+선택적으로 자연스럽게 포함할 수 있는 키워드들 (강제로 모든 키워드를 넣지 말고 맥락에 맞는 것만 선택):
+{', '.join(valid_keywords[:5])}  # 최대 5개만 표시"""
+        
+        # 브랜드 보이스 컨텍스트
+        brand_context = ""
+        if brand_voice:
+            brand_context = f"""
+
+매장 특성 및 브랜드 특징:
+{brand_voice}"""
+        
+        # 감정별 가이드 (운영 방식 고려)
+        sentiment_guide = ""
+        operation_context = ""
+        
+        # 운영 방식별 추가 컨텍스트
+        if operation_type == 'delivery_only':
+            operation_context = " (배달전용 매장이므로 매장 방문 관련 표현 절대 금지)"
+        elif operation_type == 'dine_in_only':
+            operation_context = " (홀전용 매장이므로 배달 관련 표현 절대 금지)"
+        elif operation_type == 'takeout_only':
+            operation_context = " (포장전용 매장이므로 배달/홀 관련 표현 절대 금지)"
+        
         if analysis.sentiment == "positive":
-            prompt_parts.append("→ 고객의 긍정적 경험에 대해 구체적으로 감사 표현")
+            if operation_type == 'delivery_only':
+                sentiment_guide = "긍정적인 리뷰에 대해 감사함을 표현하고 다음 주문을 자연스럽게 유도하세요."
+            elif operation_type == 'dine_in_only':
+                sentiment_guide = "긍정적인 리뷰에 대해 감사함을 표현하고 매장 재방문을 자연스럽게 유도하세요."
+            elif operation_type == 'takeout_only':
+                sentiment_guide = "긍정적인 리뷰에 대해 감사함을 표현하고 다음 포장 주문을 자연스럽게 유도하세요."
+            else:
+                sentiment_guide = "긍정적인 리뷰에 대해 감사함을 표현하고 재이용을 자연스럽게 유도하세요."
         elif analysis.sentiment == "negative":
-            prompt_parts.append("→ 문제점에 대한 진정성 있는 사과와 개선 의지 표현")
+            sentiment_guide = "부정적인 리뷰에 대해 진심으로 사과하고 구체적인 개선 의지를 보여주세요."
         else:
-            prompt_parts.append("→ 고객의 의견에 대한 감사와 더 나은 서비스 다짐")
+            if operation_type == 'delivery_only':
+                sentiment_guide = "중립적인 리뷰에 대해 주문에 감사하며 긍정적인 경험을 유도하세요."
+            elif operation_type == 'dine_in_only':
+                sentiment_guide = "중립적인 리뷰에 대해 방문에 감사하며 긍정적인 경험을 유도하세요."
+            else:
+                sentiment_guide = "중립적인 리뷰에 대해 이용에 감사하며 긍정적인 경험을 유도하세요."
         
-        # 키워드 포함 가이드
-        if branding_keywords or seo_keywords:
-            keywords_to_include = branding_keywords + seo_keywords
-            if keywords_to_include:
-                prompt_parts.append(f"자연스럽게 포함할 키워드: {', '.join(keywords_to_include[:3])}")
+        sentiment_guide += operation_context
         
-        prompt_parts.append("위 정보를 바탕으로 사장님다운 따뜻하고 진정성 있는 답글을 작성해주세요.")
+        # 리뷰 텍스트 표시 처리
+        review_display = ""
+        if review_text:
+            review_display = f'리뷰: "{review_text}"'
+        else:
+            review_display = "리뷰: (텍스트 리뷰 없이 평점만 남겨주심)"
         
-        return "\n".join(prompt_parts)
+        # 운영 방식 표시
+        operation_display = {
+            'delivery_only': '배달전용',
+            'dine_in_only': '홀전용',
+            'takeout_only': '포장전용',
+            'both': '배달+홀'
+        }
+        
+        # 기본 프롬프트 구성
+        prompt = f"""
+리뷰어: {reviewer_name}님
+평점: {rating}점/5점
+매장 운영 방식: {operation_display.get(operation_type, '배달+홀')}
+{review_display}
+{menu_str}{seo_context}{brand_context}
+
+답글 작성 가이드:
+- 길이: {min_length}-{max_length}자 (한국어 기준)
+- 톤: {reply_tone} 스타일
+- {sentiment_guide}
+
+특별 지침:
+- 매장 운영 방식({operation_display.get(operation_type, '배달+홀')})에 맞는 표현만 사용
+- 리뷰 텍스트가 없는 경우: 평점에 감사하며 간단하고 따뜻하게 응답
+- 리뷰가 없다고 아쉬워하거나 따지는 표현 금지
+- "None", "빈값", "없음" 등의 표현 사용 금지
+
+이 리뷰에 대해 설정된 스타일과 길이에 맞춰 진솔한 답글을 작성하세요.
+리뷰 내용이 있으면 구체적으로 언급하고, 없으면 평점과 이용에 대해 감사를 표현하세요."""
+        
+        return prompt.strip()
     
-    def _build_complete_reply(self, ai_reply: str, store_settings: Dict) -> str:
-        """완전한 답글 구성"""
+    def _translate_sentiment(self, sentiment: str) -> str:
+        """감정 한글 변환"""
+        translations = {
+            "positive": "긍정 😊",
+            "negative": "부정 😔",
+            "neutral": "중립 😐"
+        }
+        return translations.get(sentiment, sentiment)
+    
+    def _translate_priority(self, priority: ReviewPriority) -> str:
+        """우선순위 한글 변환"""
+        translations = {
+            ReviewPriority.URGENT: "🚨 즉시확인",
+            ReviewPriority.HIGH: "⚡ 높음",
+            ReviewPriority.MEDIUM: "⚠️ 보통",
+            ReviewPriority.LOW: "📝 낮음",
+            ReviewPriority.AUTO: "✅ 자동처리"
+        }
+        return translations.get(priority, str(priority))
+    
+    def _build_complete_reply(self, ai_reply: str, store_settings: Dict, review_data: Dict = None) -> str:
+        """새로운 템플릿 시스템을 사용한 완전한 답글 구성"""
         
-        # 인사말과 마무리 인사 (설정에 따라)
-        greeting = store_settings.get('reply_greeting', '')
-        closing = store_settings.get('reply_closing', '')
+        # 새로운 템플릿 시스템 우선 사용
+        greeting_template = store_settings.get('greeting_template', '')
+        closing_template = store_settings.get('closing_template', '')
+        
+        # 기존 설정 폴백
+        if not greeting_template:
+            greeting_template = store_settings.get('reply_greeting', '')
+        if not closing_template:
+            closing_template = store_settings.get('reply_closing', '')
+        
+        # 템플릿 변수 치환을 위한 컨텍스트 준비
+        template_context = {
+            'store_name': store_settings.get('store_name', '저희 가게'),
+            'business_type': store_settings.get('business_type', '가게'),
+            'reviewer_name': review_data.get('reviewer_name', '고객님') if review_data else '고객님',
+        }
         
         reply_parts = []
         
-        if greeting:
-            reply_parts.append(greeting)
+        # 인사말 템플릿 처리
+        if greeting_template:
+            try:
+                formatted_greeting = self._format_template(greeting_template, template_context)
+                reply_parts.append(formatted_greeting)
+            except Exception:
+                # 템플릿 처리 실패시 원본 그대로 사용
+                reply_parts.append(greeting_template)
         
+        # AI 생성 답글 본문
         reply_parts.append(ai_reply)
         
-        if closing:
-            reply_parts.append(closing)
+        # 마무리말 템플릿 처리
+        if closing_template:
+            try:
+                formatted_closing = self._format_template(closing_template, template_context)
+                reply_parts.append(formatted_closing)
+            except Exception:
+                # 템플릿 처리 실패시 원본 그대로 사용
+                reply_parts.append(closing_template)
         
-        complete_reply = ' '.join(reply_parts)
+        # 톤에 따른 적절한 구분자 선택
+        reply_tone = store_settings.get('reply_tone', 'friendly')
+        if reply_tone == 'formal':
+            separator = ' '  # 정중한 톤은 공백으로만 구분
+        else:
+            separator = ' '  # 기본적으로 공백 구분
+        
+        complete_reply = separator.join(reply_parts)
         
         # 정리
         complete_reply = self._clean_reply(complete_reply)
         
         return complete_reply
+    
+    def _format_template(self, template: str, context: Dict[str, str]) -> str:
+        """템플릿 문자열의 변수를 실제 값으로 치환"""
+        
+        formatted = template
+        
+        # 안전한 치환을 위해 하나씩 처리
+        for key, value in context.items():
+            placeholder = f"{{{key}}}"
+            if placeholder in formatted:
+                formatted = formatted.replace(placeholder, value)
+        
+        return formatted
     
     def _clean_reply(self, reply_text: str) -> str:
         """답글 정리"""
@@ -636,7 +1091,7 @@ class AIReplyManager:
         suggestions = []
         
         # 1. 길이 검증
-        length_check = self._validate_length(reply_text, issues, warnings)
+        length_check = self._validate_length(reply_text, store_settings, issues, warnings)
         
         # 2. 톤 검증
         tone_check = self._validate_tone(reply_text, sentiment, store_settings, issues, warnings)
@@ -671,22 +1126,28 @@ class AIReplyManager:
             safety_check=safety_check
         )
     
-    def _validate_length(self, reply_text: str, issues: List[str], warnings: List[str]) -> bool:
-        """길이 검증"""
+    def _validate_length(self, reply_text: str, store_settings: Dict, issues: List[str], warnings: List[str]) -> bool:
+        """동적 길이 제한을 사용한 길이 검증"""
         
         length = len(reply_text.strip())
         
-        if length < 10:
-            issues.append("답글이 너무 짧습니다 (최소 10자)")
-            return False
-        elif length < 30:
-            warnings.append("답글이 다소 짧습니다 (권장 30자 이상)")
+        # 매장별 설정된 길이 제한 사용
+        min_length = store_settings.get('min_reply_length', 50)
+        max_length = store_settings.get('max_reply_length', 200)
         
-        if length > 500:
-            issues.append("답글이 너무 깁니다 (최대 500자)")
+        # 최소 길이 검증
+        if length < min_length:
+            issues.append(f"답글이 너무 짧습니다 (최소 {min_length}자, 현재 {length}자)")
             return False
-        elif length > 300:
-            warnings.append("답글이 다소 깁니다 (권장 300자 이하)")
+        elif length < min_length + 10:  # 설정값에서 10자 이내면 경고
+            warnings.append(f"답글이 다소 짧습니다 (권장 {min_length + 10}자 이상, 현재 {length}자)")
+        
+        # 최대 길이 검증
+        if length > max_length:
+            issues.append(f"답글이 너무 깁니다 (최대 {max_length}자, 현재 {length}자)")
+            return False
+        elif length > max_length - 20:  # 설정값에서 20자 이내면 경고
+            warnings.append(f"답글이 다소 깁니다 (권장 {max_length - 20}자 이하, 현재 {length}자)")
         
         return True
     
@@ -1075,7 +1536,7 @@ class AIReplyManager:
             return await self._process_single_review(review, store_settings, platform)
     
     async def _process_single_review(self, review: Union[Dict, UnifiedReview], store_settings: Dict, platform: str = 'naver') -> ProcessingResult:
-        """단일 리뷰 처리"""
+        """단일 리뷰 처리 (재활용 로직 포함)"""
         
         # UnifiedReview 객체를 Dict로 변환 (호환성을 위해)
         if isinstance(review, UnifiedReview):
@@ -1094,19 +1555,64 @@ class AIReplyManager:
             review_id = review['id']
         
         try:
-            # 1. AI 답글 생성
-            result = await self.generate_reply(review_dict, store_settings)
+            # 기존 답글과 실패 사유 확인
+            existing_reply = review_dict.get('reply_text')
+            failure_field = self._get_failure_field(platform)
+            failure_reason = review_dict.get(failure_field)
+            
+            # 네이버는 ai_generated_reply 필드도 확인
+            if platform == 'naver':
+                existing_reply = existing_reply or review_dict.get('ai_generated_reply')
+            
+            result = None
+            
+            if existing_reply and failure_reason:
+                # 실패한 경우 재생성
+                print(f"[RETRY] 리뷰 {review_id[:8]} ({platform}): 금지어로 실패한 답글 재생성")
+                print(f"  - 실패 사유: {failure_reason[:100]}...")
+                print(f"  - 작성자명: {review_dict.get('reviewer_name')}")
+                
+                # AI를 통한 재생성
+                result = await self._generate_reply_after_failure(
+                    review_data=review_dict,
+                    store_settings=store_settings,
+                    previous_reply=existing_reply,
+                    failure_reason=failure_reason,
+                    platform=platform
+                )
+                
+            elif existing_reply and not failure_reason:
+                # 성공한 답글은 스킵
+                print(f"[SKIP] 리뷰 {review_id[:8]} ({platform}): 이미 성공한 답글 존재")
+                return ProcessingResult(
+                    review_id=review_id,
+                    status="skipped",
+                    reply_status=review_dict.get('reply_status', 'draft')
+                )
+                
+            else:
+                # 신규 생성
+                print(f"[NEW] 리뷰 {review_id[:8]} ({platform}): 신규 답글 생성")
+                result = await self.generate_reply(review_dict, store_settings, platform)
             
             # 2. 리뷰 분석 정보 추출
             analysis = await self.analyze_review(review_dict, store_settings)
             
-            # 3. 답글 상태 결정
+            # 3. 우선순위 판단 (schedulable_reply_date 설정을 위해)
+            priority, _ = self.korean_generator.get_priority_level(
+                review_dict.get('review_text', ''),
+                review_dict.get('rating', 3),
+                store_settings
+            )
+            
+            # 4. 답글 상태 결정
             reply_status = self._determine_reply_status(analysis, store_settings, platform)
             
-            # 4. 데이터베이스 업데이트
-            await self._update_review_with_reply(review_id, result, analysis, reply_status, platform)
+            # 5. 데이터베이스 업데이트
+            await self._update_review_with_reply(review_id, result, analysis, reply_status, platform, priority, review_dict)
             
-            print(f"[OK] 리뷰 {review_id[:8]} ({platform}): {reply_status} ({analysis.risk_level})")
+            action = "재생성" if failure_reason else "생성"
+            print(f"[OK] 리뷰 {review_id[:8]} ({platform}): {action} 완료 - {reply_status} ({analysis.risk_level})")
             
             return ProcessingResult(
                 review_id=review_id,
@@ -1139,19 +1645,60 @@ class AIReplyManager:
         
         return "draft"  # 기본값
     
+    def _calculate_schedulable_date(self, priority: str, review_dict: Dict) -> str:
+        """schedulable_reply_date 계산 - 00시 기준으로 정확한 날짜 계산"""
+        
+        if not review_dict or 'review_date' not in review_dict:
+            # review_date가 없으면 현재 시간 기준으로 계산
+            review_date = datetime.now().date()
+        else:
+            # review_date 파싱 (ISO 형식 가정)
+            review_date_str = review_dict['review_date']
+            try:
+                parsed_datetime = datetime.fromisoformat(review_date_str.replace('Z', '+00:00'))
+                review_date = parsed_datetime.date()  # 날짜만 추출
+            except:
+                # 파싱 실패시 현재 날짜 사용
+                review_date = datetime.now().date()
+        
+        # 우선순위에 따른 지연 일수 설정
+        priority_value = priority.value if hasattr(priority, 'value') else priority
+        
+        if priority_value == 'auto':  # AUTO: 단순 긍정 리뷰
+            delay_days = 1  # 다음날 00시
+        else:  # 사장님 확인 필요: 불만, 질문, 위험 모두
+            delay_days = 2  # 모레 00시
+        
+        # 목표 날짜의 00시로 설정
+        target_date = review_date + timedelta(days=delay_days)
+        schedulable_datetime = datetime.combine(target_date, datetime.min.time())
+        
+        return schedulable_datetime.isoformat()
+    
     async def _update_review_with_reply(self, review_id: str, result: ReplyResult, 
-                                      analysis: ReviewAnalysis, reply_status: str, platform: str = 'naver'):
-        """리뷰 데이터베이스 업데이트"""
+                                      analysis: ReviewAnalysis, reply_status: str, platform: str = 'naver',
+                                      priority: str = None, review_dict: Dict = None):
+        """리뷰 데이터베이스 업데이트 (모든 플랫폼 통합)"""
         
         table_name = self._get_table_name(platform)
+        failure_field = self._get_failure_field(platform)
         
-        # 기본 업데이트 데이터
+        # schedulable_reply_date 계산
+        schedulable_reply_date = self._calculate_schedulable_date(priority, review_dict)
+        
+        # 기본 업데이트 데이터 (모든 플랫폼 공통)
         update_data = {
             'reply_status': reply_status,
+            'reply_text': result.complete_reply,  # 모든 플랫폼에 답글 저장
+            'requires_approval': analysis.requires_approval,  # 모든 플랫폼에 승인 필요 여부
+            'schedulable_reply_date': schedulable_reply_date,
             'updated_at': datetime.now().isoformat()
         }
         
-        # Naver 플랫폼만 AI 관련 컬럼들이 있음
+        # 실패 사유 필드 초기화 (성공 시)
+        update_data[failure_field] = None
+        
+        # Naver 플랫폼만 추가 AI 관련 컬럼들이 있음
         if platform == 'naver':
             update_data.update({
                 # AI 분석 결과
@@ -1164,17 +1711,7 @@ class AIReplyManager:
                 'ai_model_used': result.ai_model_used,
                 'ai_generation_time_ms': result.ai_generation_time_ms,
                 'ai_confidence_score': result.ai_confidence_score,
-                
-                # 승인 정보
-                'requires_approval': analysis.requires_approval,
             })
-        
-        # 배달 플랫폼들은 reply_text 필드에 AI 답글 저장
-        if platform in ['baemin', 'yogiyo', 'coupangeats']:
-            update_data['reply_text'] = result.complete_reply
-        # 네이버는 자동 승인된 경우에만 reply_text 저장
-        elif platform == 'naver' and reply_status == "approved":
-            update_data['reply_text'] = result.complete_reply
         
         response = self.supabase.table(table_name).update(update_data).eq('id', review_id).execute()
         
@@ -1189,32 +1726,79 @@ class AIReplyManager:
         return response.data if response.data else None
     
     async def _get_unanswered_reviews(self, store_id: str, platform: str = 'naver', limit: Optional[int] = None) -> List[Dict]:
-        """미답변 리뷰 조회"""
+        """미답변 리뷰 조회 (실패한 리뷰 포함)"""
         
         table_name = self._get_table_name(platform)
+        failure_field = self._get_failure_field(platform)
         
-        # 플랫폼별 쿼리 구성
-        query = self.supabase.table(table_name)\
-            .select('*')\
-            .eq('platform_store_id', store_id)\
-            .order('review_date', desc=False)  # 오래된 리뷰부터
+        # 두 개의 쿼리로 나누어 실행 후 합치기
+        all_reviews = []
         
-        # 플랫폼별 조건 처리
-        if platform == 'naver':
-            # Naver: reply_status가 'draft'이고 ai_generated_reply가 null
-            query = query.eq('reply_status', 'draft').is_('ai_generated_reply', 'null')
-        elif platform in ['baemin', 'yogiyo', 'coupangeats']:
-            # 배달 플랫폼들: reply_text가 null인 리뷰 (아직 AI 답글이 생성되지 않은 리뷰)
-            query = query.is_('reply_text', 'null')
-        else:
-            # 기본: reply_status가 'draft'
-            query = query.eq('reply_status', 'draft')
-        
-        if limit:
-            query = query.limit(limit)
-        
-        response = query.execute()
-        return response.data or []
+        try:
+            # 1차: 미답변 리뷰 조회
+            if platform == 'naver':
+                # Naver: ai_generated_reply가 null인 경우
+                query1 = self.supabase.table(table_name)\
+                    .select('*')\
+                    .eq('platform_store_id', store_id)\
+                    .is_('ai_generated_reply', 'null')\
+                    .order('review_date', desc=False)
+            else:
+                # 배달 플랫폼들: reply_text가 null이거나 빈 문자열인 경우
+                # 방법 1: null인 리뷰 조회
+                query1 = self.supabase.table(table_name)\
+                    .select('*')\
+                    .eq('platform_store_id', store_id)\
+                    .is_('reply_text', 'null')\
+                    .order('review_date', desc=False)
+
+            response1 = query1.execute()
+            if response1.data:
+                all_reviews.extend(response1.data)
+
+            # 1-2차: 빈 문자열인 리뷰도 조회 (배달 플랫폼만)
+            if platform != 'naver':
+                query1b = self.supabase.table(table_name)\
+                    .select('*')\
+                    .eq('platform_store_id', store_id)\
+                    .eq('reply_text', '')\
+                    .order('review_date', desc=False)
+
+                response1b = query1b.execute()
+                if response1b.data:
+                    # 중복 제거
+                    existing_ids = {review['id'] for review in all_reviews}
+                    for review in response1b.data:
+                        if review['id'] not in existing_ids:
+                            all_reviews.append(review)
+            
+            # 2차: 실패한 리뷰 조회
+            query2 = self.supabase.table(table_name)\
+                .select('*')\
+                .eq('platform_store_id', store_id)\
+                .not_.is_(failure_field, 'null')\
+                .order('review_date', desc=False)
+            
+            response2 = query2.execute()
+            if response2.data:
+                # 중복 제거 (ID 기준)
+                existing_ids = {review['id'] for review in all_reviews}
+                for review in response2.data:
+                    if review['id'] not in existing_ids:
+                        all_reviews.append(review)
+            
+            # 날짜순 정렬
+            all_reviews.sort(key=lambda x: x.get('review_date', ''))
+            
+            # 제한 적용
+            if limit and len(all_reviews) > limit:
+                all_reviews = all_reviews[:limit]
+            
+            return all_reviews
+            
+        except Exception as e:
+            print(f"[ERROR] 리뷰 조회 실패 ({platform}): {str(e)}")
+            return []
     
     async def _get_active_stores(self) -> List[Dict]:
         """자동 답글이 활성화된 매장 조회"""
@@ -1418,7 +2002,7 @@ class AIReplyManager:
             return False
     
     async def get_pending_approvals(self, user_id: str, store_id: Optional[str] = None) -> List[Dict]:
-        """승인 대기 중인 답글 조회"""
+        """승인 대기 중인 답글 조회 (우선순위 정렬)"""
         
         try:
             # 1. 사용자가 관리하는 매장들 조회
@@ -1453,9 +2037,20 @@ class AIReplyManager:
             
             pending_reviews = response.data or []
             
-            # 3. 우선순위 정렬 (고위험 먼저, 오래된 것부터)
+            # 3. 각 리뷰에 우선순위 추가
+            for review in pending_reviews:
+                priority, reason = self.korean_generator.get_priority_level(
+                    review.get('review_text', ''),
+                    review.get('rating', 3),
+                    {'store_name': review.get('platform_store', {}).get('store_name', '')}
+                )
+                review['priority'] = priority
+                review['priority_reason'] = reason
+                review['priority_score'] = self._get_priority_score(priority)
+            
+            # 4. 우선순위로 정렬 (점수가 낮을수록 높은 우선순위)
             pending_reviews.sort(key=lambda x: (
-                -1 if self._is_high_risk_review(x) else 1,
+                x.get('priority_score', 999),
                 x.get('created_at', '')
             ))
             
@@ -1464,6 +2059,17 @@ class AIReplyManager:
         except Exception as e:
             print(f"승인 대기 조회 실패: {str(e)}")
             return []
+    
+    def _get_priority_score(self, priority: ReviewPriority) -> int:
+        """우선순위를 숫자로 변환 (낮을수록 높은 우선순위)"""
+        scores = {
+            ReviewPriority.URGENT: 1,
+            ReviewPriority.HIGH: 2,
+            ReviewPriority.MEDIUM: 3,
+            ReviewPriority.LOW: 4,
+            ReviewPriority.AUTO: 5
+        }
+        return scores.get(priority, 999)
     
     async def auto_approve_positive_reviews(self, store_id: str) -> int:
         """긍정 리뷰 자동 승인"""

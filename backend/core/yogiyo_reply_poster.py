@@ -11,7 +11,7 @@ import sys
 import asyncio
 import logging
 import io
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import json
@@ -264,24 +264,65 @@ class YogiyoReplyPoster:
             return None
     
     async def _get_pending_reviews(self, platform_store_uuid: str, limit: int) -> List[Dict]:
-        """답글 대기 리뷰 조회"""
+        """답글 대기 리뷰 조회 (schedulable_reply_date 필터링 포함)"""
         try:
             logger.info("답글 대기 상태 리뷰 검색 중...")
-            
+
             # draft 상태의 답글 조회 (매칭을 위해 더 많은 필드 포함)
             result = self.supabase.table('reviews_yogiyo').select(
-                'id, yogiyo_dsid, reviewer_name, review_text, reply_text, reply_status, platform_store_id, review_date, overall_rating'
+                'id, yogiyo_dsid, reviewer_name, review_text, reply_text, reply_status, platform_store_id, review_date, overall_rating, schedulable_reply_date'
             ).eq(
                 'platform_store_id', platform_store_uuid
             ).eq(
-                'reply_status', 'draft'  # 테스트를 위해 draft로 변경
+                'reply_status', 'draft'  # draft 상태의 리뷰
             ).neq(
-                'reply_text', None  # 답글 텍스트 있음
-            ).limit(limit).execute()
+                'reply_text', 'null'  # 답글이 생성되어 있는 리뷰 (포스팅 대기 상태)
+            ).limit(limit * 2).execute()  # schedulable_reply_date 필터링을 위해 더 많이 조회
             
             if result.data:
                 logger.info(f"답글 대기 리뷰 {len(result.data)}개 발견")
-                return result.data
+
+                # schedulable_reply_date 필터링
+                current_time = datetime.now()
+                filtered_reviews = []
+
+                for review in result.data:
+                    schedulable_date = review.get('schedulable_reply_date')
+                    review_id = review.get('id', 'unknown')
+
+                    if schedulable_date:
+                        try:
+                            # ISO 포맷 파싱 및 시간대 처리
+                            if isinstance(schedulable_date, str):
+                                # UTC 시간으로 파싱
+                                scheduled_time = datetime.fromisoformat(schedulable_date.replace('Z', '+00:00'))
+
+                                # KST로 변환
+                                if scheduled_time.tzinfo:
+                                    scheduled_time = scheduled_time.astimezone(timezone(timedelta(hours=9)))
+                                else:
+                                    scheduled_time = scheduled_time.replace(tzinfo=timezone(timedelta(hours=9)))
+
+                                # 현재 시간과 비교 (타임존 제거)
+                                scheduled_time_naive = scheduled_time.replace(tzinfo=None)
+
+                                if current_time < scheduled_time_naive:
+                                    remaining = scheduled_time_naive - current_time
+                                    logger.info(f"⏳ 답글 등록 대기: {review_id} (남은 시간: {remaining})")
+                                    continue  # 시간이 안된 경우 스킵
+                                else:
+                                    logger.info(f"✅ 답글 등록 가능: {review_id} (예약 시간 도달)")
+                        except Exception as e:
+                            logger.warning(f"⚠️ schedulable_reply_date 파싱 오류: {e}, 즉시 처리로 진행")
+
+                    filtered_reviews.append(review)
+
+                    # limit에 도달하면 중단
+                    if len(filtered_reviews) >= limit:
+                        break
+
+                logger.info(f"시간 필터링 후 리뷰: {len(filtered_reviews)}개")
+                return filtered_reviews
             else:
                 logger.info("답글 대기 리뷰가 없습니다")
                 return []
@@ -340,27 +381,88 @@ class YogiyoReplyPoster:
                 
                 # 답글 등록
                 element_index = matched_review.get('element_index', review_index)
-                success = await self.post_reply(element_index, reply_text)
-                
-                if success:
-                    # DB 상태 업데이트
-                    self.supabase.table('reviews_yogiyo') \
-                        .update({
-                            'reply_status': 'sent',
-                            'reply_posted_at': datetime.now().isoformat()
-                        }) \
-                        .eq('id', review_data['id']) \
-                        .execute()
-                    
-                    results.append({
-                        "success": True,
-                        "review_id": review_data.get('id'),
-                        "dsid": dsid,
-                        "status": "답글 등록 성공"
-                    })
-                    
-                    # 다음 답글 전 대기
-                    await asyncio.sleep(3)
+                result = await self.post_reply(element_index, reply_text, review_data)
+
+                # 결과 처리
+                if isinstance(result, dict):
+                    if result.get('success'):
+                        # DB 상태 업데이트 (성공)
+                        self.supabase.table('reviews_yogiyo') \
+                            .update({
+                                'reply_status': 'sent',
+                                'reply_posted_at': datetime.now().isoformat()
+                            }) \
+                            .eq('id', review_data['id']) \
+                            .execute()
+
+                        results.append({
+                            "success": True,
+                            "review_id": review_data.get('id'),
+                            "dsid": dsid,
+                            "status": "답글 등록 성공"
+                        })
+
+                        # 다음 답글 전 대기
+                        await asyncio.sleep(3)
+                    else:
+                        # 금지어 실패 처리
+                        error_message = result.get('error', '')
+                        popup_message = result.get('popup_message', '')
+                        detected_word = result.get('detected_word', '')
+
+                        # 금지어가 감지된 경우
+                        if 'forbidden word' in error_message.lower() or detected_word:
+                            # DB에 오류 메시지 저장
+                            self.supabase.table('reviews_yogiyo') \
+                                .update({
+                                    'reply_status': 'failed',
+                                    'reply_error_message': popup_message or error_message,
+                                    'updated_at': datetime.now().isoformat()
+                                }) \
+                                .eq('id', review_data['id']) \
+                                .execute()
+
+                            logger.info(f"[YOGIYO] 💾 DB 업데이트 완료: reply_error_message = '{popup_message[:100] if popup_message else error_message[:100]}...'")
+
+                            if detected_word:
+                                logger.info(f"[YOGIYO] 📄 상세 정보:")
+                                logger.info(f"   - 원본 답글: {reply_text[:50]}...")
+                                logger.info(f"   - 금지 단어: '{detected_word}'")
+                                logger.info(f"   - 다음 AI 생성 시 이 정보를 참고하여 답글 재작성 예정")
+
+                        results.append({
+                            "success": False,
+                            "review_id": review_data.get('id'),
+                            "dsid": dsid,
+                            "error": error_message,
+                            "detected_word": detected_word
+                        })
+                elif isinstance(result, bool):
+                    # 호환성을 위해 bool 반환을 처리
+                    if result:
+                        # DB 상태 업데이트 (성공)
+                        self.supabase.table('reviews_yogiyo') \
+                            .update({
+                                'reply_status': 'sent',
+                                'reply_posted_at': datetime.now().isoformat()
+                            }) \
+                            .eq('id', review_data['id']) \
+                            .execute()
+
+                        results.append({
+                            "success": True,
+                            "review_id": review_data.get('id'),
+                            "dsid": dsid,
+                            "status": "답글 등록 성공"
+                        })
+                        await asyncio.sleep(3)
+                    else:
+                        results.append({
+                            "success": False,
+                            "review_id": review_data.get('id'),
+                            "dsid": dsid,
+                            "error": "답글 등록 실패"
+                        })
                 else:
                     results.append({
                         "success": False,
@@ -844,7 +946,7 @@ class YogiyoReplyPoster:
         except Exception:
             return False
     
-    async def post_reply(self, review_element_index: int, reply_text: str) -> bool:
+    async def post_reply(self, review_element_index: int, reply_text: str, review_data: Optional[Dict] = None) -> Dict[str, Any]:
         """답글 등록"""
         try:
             logger.info(f"답글 등록 시작 (리뷰 인덱스: {review_element_index})")
@@ -928,42 +1030,183 @@ class YogiyoReplyPoster:
                 'button.hsiXYt[size="40"]:has-text("등록")'
             ]
             
+            submit_clicked = False
             for selector in submit_button_selectors:
                 try:
                     submit_button = await self.page.wait_for_selector(selector, timeout=3000)
                     if submit_button:
                         logger.info(f"등록 버튼 발견: {selector}")
                         await submit_button.click()
-                        await asyncio.sleep(3)  # 등록 완료 대기
+                        submit_clicked = True
                         logger.info("답글 등록 버튼 클릭 완료")
                         break
                 except:
                     continue
+
+            if not submit_clicked:
+                logger.error("등록 버튼을 찾을 수 없음")
+                return False
+
+            # 등록 처리 대기 (금지어 팝업 체크를 위해)
+            await asyncio.sleep(2)
+
+            # 요기요 금지어 팝업 체크
+            logger.info("[YOGIYO] 🔍 금지어 팝업 확인 중...")
+
+            # 요기요 금지어 팝업 셀렉터 (새로운 HTML 구조 기반)
+            forbidden_popup_selectors = [
+                'p.Typography__StyledTypography-sc-r9ksfy-0.buezIH[color="ygyOrange"]',
+                'p[color="ygyOrange"]:has-text("작성할 수 없어요")',
+                'p:has-text("요기요 운영 정책에 따라")',
+                'div[role="dialog"] p[color="ygyOrange"]',
+                'div.modal p:has-text("작성할 수 없어요")'
+            ]
+
+            forbidden_popup = None
+            for selector in forbidden_popup_selectors:
+                try:
+                    forbidden_popup = await self.page.query_selector(selector)
+                    if forbidden_popup:
+                        logger.info(f"[YOGIYO] 금지어 팝업 감지: {selector}")
+                        break
+                except:
+                    continue
+
+            if forbidden_popup:
+                logger.warning("[YOGIYO] ⚠️ 요기요 금지어 팝업 감지!")
+
+                # 팝업 텍스트 추출
+                popup_message = "요기요 금지어 팝업 감지"  # 기본값
+                detected_forbidden_word = None
+
+                try:
+                    logger.info("[YOGIYO] 🔍 요기요 팝업 텍스트 추출 중...")
+                    popup_text = await forbidden_popup.text_content()
+
+                    if popup_text:
+                        logger.info(f"[YOGIYO] 📄 요기요 팝업 원문: {popup_text}")
+
+                        # 요기요 팝업 메시지 패턴: "요기요 운영 정책에 따라 이 단어는 작성할 수 없어요. \"쿠팡\""
+                        import re
+                        pattern = r'"요기요\s+운영\s+정책에\s+따라.*?\"([^"]+)\"'
+                        match = re.search(pattern, popup_text)
+
+                        if match:
+                            detected_forbidden_word = match.group(1)
+                            logger.info(f"[YOGIYO] ✅ 요기요 금지어 추출 성공: {detected_forbidden_word}")
+                            popup_message = f"요기요 금지어 알림: {popup_text[:150]}"
+                        else:
+                            # 다른 패턴 시도
+                            pattern2 = r'\"([^"]+)\"'
+                            matches = re.findall(pattern2, popup_text)
+                            if matches:
+                                detected_forbidden_word = matches[-1]  # 마지막 따옴표 내용
+                                logger.info(f"[YOGIYO] ✅ 요기요 금지어 추출 (대체 패턴): {detected_forbidden_word}")
+                            popup_message = f"요기요 금지어 팝업: {popup_text[:150]}"
+                except Exception as e:
+                    logger.error(f"[YOGIYO] 팝업 텍스트 추출 실패: {e}")
+
+                # 취소 버튼 클릭
+                cancel_button_selectors = [
+                    'button.sc-bczRLJ.dTrTca.sc-eCYdqJ.hsiXYt[size="40"][color="accent100"]:has-text("취소")',
+                    'button[color="accent100"]:has-text("취소")',
+                    'button:has-text("취소")',
+                    'button.dTrTca:has-text("취소")',
+                    'div[role="dialog"] button:has-text("취소")'
+                ]
+
+                for selector in cancel_button_selectors:
+                    try:
+                        cancel_button = await self.page.wait_for_selector(selector, timeout=3000)
+                        if cancel_button:
+                            logger.info(f"[YOGIYO] ✅ 취소 버튼 발견: {selector}")
+                            await cancel_button.click()
+                            logger.info("[YOGIYO] 🔘 팝업 취소 버튼 클릭 완료")
+                            await asyncio.sleep(1)
+                            break
+                    except:
+                        continue
+
+                logger.error(f"[YOGIYO] ❌ 리뷰 금지어로 인한 답글 등록 실패")
+                logger.info(f"[YOGIYO] 📄 요기요 메시지: {popup_message}")
+                logger.info(f"[YOGIYO] 🔄 main.py 다음 실행 시 이 정보를 바탕으로 새 답글 생성됩니다")
+
+                # 금지어 감지 시 실패 반환
+                return {
+                    "success": False,
+                    "error": f"Yogiyo forbidden word popup: {popup_message}",
+                    "detected_word": detected_forbidden_word,
+                    "popup_message": popup_message
+                }
+
+            # 금지어 팝업이 없는 경우 성공 대기
+            logger.info("[YOGIYO] ✅ 요기요 금지어 팝업 없음 - 정상 처리")
+            await asyncio.sleep(1)
             
             # 성공 확인 (답글이 표시되는지)
             await asyncio.sleep(2)
-            
+
             # 답글이 등록되었는지 확인
             reply_check = await review_element.query_selector('.owner-reply, .reply-content')
             if reply_check:
                 logger.info("답글 등록 성공")
-                return True
-            
+                return {
+                    "success": True,
+                    "status": "sent",
+                    "message": "답글 등록 성공"
+                }
+
             logger.warning("답글 등록 확인 실패")
-            return True  # 일단 성공으로 처리
-            
+            return {
+                "success": True,  # 일단 성공으로 처리
+                "status": "sent",
+                "message": "답글 등록 완료 (확인 대기)"
+            }
+
         except Exception as e:
             logger.error(f"답글 등록 실패: {e}")
-            return False
+            return {
+                "success": False,
+                "status": "failed",
+                "error": str(e)
+            }
     
     
     async def cleanup(self):
-        """리소스 정리"""
+        """리소스 정리 (Windows asyncio 경고 해결)"""
         try:
-            if self.page:
+            # Windows ProactorEventLoop 리소스 정리를 위한 순차적 종료
+            if self.page and not self.page.is_closed():
                 await self.page.close()
+                await asyncio.sleep(0.1)  # 리소스 정리 대기
+
             if self.browser:
                 await self.browser.close()
+                await asyncio.sleep(0.2)  # 브라우저 종료 대기
+
+            # Windows에서 pipe 리소스 정리 강제 실행
+            import sys
+            if sys.platform == "win32":
+                try:
+                    # ProactorEventLoop에서 pending tasks 정리
+                    loop = asyncio.get_running_loop()
+                    if hasattr(loop, '_default_executor') and loop._default_executor:
+                        loop._default_executor.shutdown(wait=False)
+                        await asyncio.sleep(0.1)
+
+                    # 남은 task들 정리
+                    pending_tasks = [task for task in asyncio.all_tasks(loop)
+                                   if not task.done() and task != asyncio.current_task()]
+                    if pending_tasks:
+                        for task in pending_tasks:
+                            if not task.cancelled():
+                                task.cancel()
+                        # 취소된 작업들 완료 대기
+                        await asyncio.gather(*pending_tasks, return_exceptions=True)
+
+                except Exception as e:
+                    logger.debug(f"Windows 리소스 정리 중 예외 (무시 가능): {e}")
+
             logger.info("리소스 정리 완료")
         except Exception as e:
             logger.error(f"리소스 정리 실패: {e}")
@@ -971,32 +1214,56 @@ class YogiyoReplyPoster:
 
 async def main():
     """테스트 실행"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Yogiyo Reply Poster')
+    parser.add_argument('--store-uuid', type=str, help='Platform store UUID')
+    parser.add_argument('--dry-run', action='store_true', help='Dry run mode (no actual posting)')
+    parser.add_argument('--limit', type=int, default=5, help='Maximum number of reviews to process')
+    
+    args = parser.parse_args()
+    
     try:
-        # 테스트용 매장 정보
-        user_id = "a7654c42-10ed-435f-97d8-d2c2dfeccbcb"
+        if args.store_uuid:
+            # 지정된 매장 UUID 사용
+            result = supabase.table('platform_stores') \
+                .select('*') \
+                .eq('id', args.store_uuid) \
+                .eq('platform', 'yogiyo') \
+                .execute()
+            
+            if not result.data:
+                logger.error(f"매장을 찾을 수 없습니다: {args.store_uuid}")
+                return
+                
+            store_uuid = result.data[0]['id']
+            store_name = result.data[0]['store_name']
+        else:
+            # 기본: 첫 번째 활성 매장 사용
+            user_id = "a7654c42-10ed-435f-97d8-d2c2dfeccbcb"
+            
+            result = supabase.table('platform_stores') \
+                .select('*') \
+                .eq('user_id', user_id) \
+                .eq('platform', 'yogiyo') \
+                .eq('is_active', True) \
+                .execute()
+            
+            if not result.data:
+                logger.error("활성화된 요기요 매장이 없습니다")
+                return
+            
+            store_uuid = result.data[0]['id']
+            store_name = result.data[0]['store_name']
         
-        # 사용자의 요기요 매장 조회
-        result = supabase.table('platform_stores') \
-            .select('*') \
-            .eq('user_id', user_id) \
-            .eq('platform', 'yogiyo') \
-            .eq('is_active', True) \
-            .execute()
-        
-        if not result.data:
-            logger.error("활성화된 요기요 매장이 없습니다")
-            return
-        
-        store_uuid = result.data[0]['id']
-        store_name = result.data[0]['store_name']
         logger.info(f"매장 선택: {store_name} (UUID: {store_uuid})")
         
         # 답글 등록기 실행
         poster = YogiyoReplyPoster()
         result = await poster.run(
             platform_store_uuid=store_uuid,
-            limit=5,
-            dry_run= False  # DRY RUN 모드로 테스트
+            limit=args.limit,
+            dry_run=args.dry_run
         )
         
         print("\n" + "="*50)
@@ -1022,4 +1289,21 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Windows에서 asyncio 경고 해결을 위한 이벤트 루프 정책 설정
+    import sys
+    if sys.platform == "win32":
+        try:
+            # WindowsProactorEventLoopPolicy 사용 (pipe 리소스 정리 개선)
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        except AttributeError:
+            # 이전 버전 Python에서는 기본 정책 사용
+            pass
+
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n[요기요] 사용자에 의해 중단됨")
+    except Exception as e:
+        print(f"[요기요] 실행 오류: {e}")
+        import traceback
+        traceback.print_exc()

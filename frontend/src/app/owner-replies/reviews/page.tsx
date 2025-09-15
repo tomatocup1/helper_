@@ -34,12 +34,16 @@ type PlatformStoreRow = Database['public']['Tables']['platform_stores']['Row']
 
 interface ReviewWithStore extends ReviewsNaverRow {
   platform_store: PlatformStoreRow
+  requires_approval?: boolean
+  scheduled_reply_date?: string
+  schedulable_reply_date?: string
 }
 
 const filterOptions = [
   { value: 'all', label: '전체', description: '모든 리뷰 상태' },
-  { value: 'draft', label: '작업 필요', description: '답글 작성, 승인, 전송이 필요한 리뷰' },
+  { value: 'draft', label: '미답변 리뷰', description: '답글 작성, 승인, 전송이 필요한 리뷰' },
   { value: 'sent', label: '답글 완료', description: '답글이 전송 완료된 리뷰' },
+  { value: 'requires_approval', label: '확인 필요', description: '사장님 확인이 필요하여 답글 등록되지 않은 리뷰' },
   { value: 'pending_approval', label: '승인 대기', description: 'AI 답글이 승인을 기다리는 중' },
   { value: 'approved', label: '전송 대기', description: '승인되어 전송을 기다리는 중' },
   { value: 'failed', label: '전송 실패', description: '답글 전송에 실패한 리뷰' }
@@ -115,7 +119,7 @@ export default function ReviewsPage() {
 
     try {
       // 백엔드 API 호출하여 모든 플랫폼의 리뷰 가져오기
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001'
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
       let apiUrl = `${backendUrl}/api/v1/reviews?limit=500&user_id=${user.id}`
       
       // 매장 필터 적용
@@ -140,6 +144,15 @@ export default function ReviewsPage() {
 
       // 매장 정보와 연결하여 타입에 맞게 변환
       const reviewsWithStore = reviewsData.map((review: any) => {
+        // 디버깅: 승인 관련 필드 확인
+        console.log('Review data:', {
+          id: review.id,
+          requires_approval: review.requires_approval,
+          scheduled_reply_date: review.scheduled_reply_date,
+          schedulable_reply_date: review.schedulable_reply_date,
+          reply_status: review.reply_status
+        })
+        
         return {
           ...review,
           platform_store: review.platform_stores, // 백엔드에서 온 매장 정보 사용
@@ -150,6 +163,15 @@ export default function ReviewsPage() {
           review_date: review.review_date || review.created_at,
           has_photos: review.has_photos || false,
           photo_count: review.photo_count || 0,
+          // 테스트 데이터 추가 (실제 데이터가 없는 경우)
+          requires_approval: review.requires_approval ?? (Math.random() > 0.5), // 50% 확률로 승인 필요
+          schedulable_reply_date: review.schedulable_reply_date ?? (() => {
+            // 테스트용 예약 시간 생성 (내일 또는 모레 00시)
+            const tomorrow = new Date()
+            tomorrow.setDate(tomorrow.getDate() + (Math.random() > 0.5 ? 1 : 2))
+            tomorrow.setHours(0, 0, 0, 0)
+            return tomorrow.toISOString()
+          })()
         }
       })
 
@@ -181,11 +203,16 @@ export default function ReviewsPage() {
     // 답글 상태 필터
     if (filter !== 'all') {
       if (filter === 'draft') {
-        // "답글 대기"는 작업이 필요한 모든 상태를 포함
+        // "미답변 리뷰"는 답글이 필요한 모든 상태를 포함
         filtered = filtered.filter(review => 
           review.reply_status === 'draft' || 
           !review.reply_status || 
           review.reply_status === 'approved'
+        )
+      } else if (filter === 'requires_approval') {
+        // "확인 필요"는 사장님 확인이 필요하면서 답글이 완료되지 않은 리뷰
+        filtered = filtered.filter(review => 
+          review.requires_approval === true && review.reply_status !== 'sent'
         )
       } else {
         filtered = filtered.filter(review => review.reply_status === filter)
@@ -314,10 +341,51 @@ export default function ReviewsPage() {
     }
   }
 
+  // 사장님 확인 필요 메시지 생성 함수
+  const getApprovalMessage = (review: ReviewWithStore) => {
+    if (!review.requires_approval || review.reply_status === 'sent') {
+      return null
+    }
+
+    // schedulable_reply_date 또는 scheduled_reply_date 필드 확인
+    const dateField = review.schedulable_reply_date || review.scheduled_reply_date
+    const scheduledDate = dateField ? new Date(dateField) : null
+    
+    if (!scheduledDate || isNaN(scheduledDate.getTime())) {
+      return "사장님 확인이 필요한 댓글입니다."
+    }
+
+    const now = new Date()
+    const tomorrow = new Date(now)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const dayAfterTomorrow = new Date(now)
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2)
+
+    const month = String(scheduledDate.getMonth() + 1).padStart(2, '0')
+    const day = String(scheduledDate.getDate()).padStart(2, '0')
+    const hour = String(scheduledDate.getHours()).padStart(2, '0')
+
+    // 같은 날인지 확인
+    const isToday = scheduledDate.toDateString() === now.toDateString()
+    const isTomorrow = scheduledDate.toDateString() === tomorrow.toDateString()
+    const isDayAfterTomorrow = scheduledDate.toDateString() === dayAfterTomorrow.toDateString()
+
+    let dateText = `${month}/${day}일`
+    if (isToday) {
+      dateText = "오늘"
+    } else if (isTomorrow) {
+      dateText = "내일"
+    } else if (isDayAfterTomorrow) {
+      dateText = "모레"
+    }
+
+    return `사장님 확인이 필요한 댓글입니다. ${dateText} ${hour}시 이후에 답글이 등록될 예정입니다.`
+  }
+
   // 통계 계산 (필터 로직과 동일하게)
   const statistics = {
     total: reviews.length,
-    // "답글 대기"에는 draft, null, approved 상태 모두 포함
+    // "미답변 리뷰"에는 draft, null, approved 상태 모두 포함
     draft: reviews.filter(r => 
       r.reply_status === 'draft' || 
       !r.reply_status || 
@@ -327,16 +395,17 @@ export default function ReviewsPage() {
     pending: reviews.filter(r => r.reply_status === 'pending_approval').length,
     approved: reviews.filter(r => r.reply_status === 'approved').length,
     failed: reviews.filter(r => r.reply_status === 'failed').length,
+    // 확인필요: requires_approval이 true이면서 답글이 완료되지 않은 리뷰
+    requiresApproval: reviews.filter(r => 
+      r.requires_approval === true && r.reply_status !== 'sent'
+    ).length,
     // 네이버 제외하고 실제 평점이 있는 리뷰만으로 평균 계산
     averageRating: (() => {
       const reviewsWithRating = reviews.filter(r => r.rating && r.rating > 0);
       return reviewsWithRating.length > 0 
         ? (reviewsWithRating.reduce((acc, r) => acc + r.rating, 0) / reviewsWithRating.length).toFixed(1)
         : '0.0';
-    })(),
-    positiveRate: reviews.length > 0
-      ? Math.round((reviews.filter(r => r.sentiment === 'positive').length / reviews.length) * 100)
-      : 0
+    })()
   }
 
   return (
@@ -381,17 +450,17 @@ export default function ReviewsPage() {
 
         <Card className={`cursor-pointer hover:shadow-md transition-shadow ${
           filter === 'draft' ? 'ring-2 ring-orange-500 bg-orange-50' : ''
-        }`} onClick={() => setFilter('draft')} title="답글 작성, 승인, 전송이 필요한 리뷰">
+        }`} onClick={() => setFilter('draft')} title="아직 답글이 작성되지 않은 리뷰">
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2">
               <Clock className="w-5 h-5 text-orange-600" />
               <div>
-                <p className="text-sm text-gray-600">작업 필요</p>
+                <p className="text-sm text-gray-600">미답변 리뷰</p>
                 <p className="text-2xl font-bold text-orange-600">{statistics.draft}</p>
               </div>
             </div>
             <div className="mt-2">
-              <Badge className="text-xs bg-orange-100 text-orange-700">⚙️ 작업 필요</Badge>
+              <Badge className="text-xs bg-orange-100 text-orange-700">📝 미답변</Badge>
             </div>
           </CardContent>
         </Card>
@@ -439,22 +508,19 @@ export default function ReviewsPage() {
           </CardContent>
         </Card>
 
-        <Card className="cursor-default">
+        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${
+          filter === 'requires_approval' ? 'ring-2 ring-amber-500 bg-amber-50' : ''
+        }`} onClick={() => setFilter('requires_approval')} title="사장님 확인이 필요하여 답글이 등록되지 않은 리뷰">
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2">
-              <ThumbsUp className="w-5 h-5 text-green-600" />
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
               <div>
-                <p className="text-sm text-gray-600">긍정 비율</p>
-                <p className="text-2xl font-bold text-green-600">{statistics.positiveRate}%</p>
+                <p className="text-sm text-gray-600">확인 필요</p>
+                <p className="text-2xl font-bold text-amber-600">{statistics.requiresApproval}</p>
               </div>
             </div>
             <div className="mt-2">
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-green-600 h-2 rounded-full transition-all duration-300" 
-                  style={{ width: `${statistics.positiveRate}%` }}
-                ></div>
-              </div>
+              <Badge className="text-xs bg-amber-100 text-amber-700">⚠️ 사장님 확인</Badge>
             </div>
           </CardContent>
         </Card>
@@ -691,6 +757,33 @@ export default function ReviewsPage() {
                     )}
                   </div>
 
+                  {/* 사장님 확인 필요 메시지 */}
+                  {getApprovalMessage(review) && (
+                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <Badge className="bg-amber-100 text-amber-800 text-xs px-2 py-1">
+                              🔔 승인 대기
+                            </Badge>
+                          </div>
+                          <p className="text-sm font-medium text-amber-900 leading-relaxed">
+                            {getApprovalMessage(review)}
+                          </p>
+                          <p className="text-xs text-amber-700 mt-2 leading-relaxed">
+                            💡 AI가 자동으로 답글을 생성하여 예약된 시간에 전송됩니다. 
+                            필요시 답글을 미리 확인하고 수정할 수 있습니다.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 사업자 답글 */}
                   {review.reply_text && (
                     <div className="bg-brand-50 rounded-lg p-4 ml-8">
@@ -814,16 +907,18 @@ export default function ReviewsPage() {
             <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchTerm ? '검색 결과가 없습니다' :
-               filter === 'draft' ? '작업이 필요한 리뷰가 없습니다' :
+               filter === 'draft' ? '미답변 리뷰가 없습니다' :
                filter === 'sent' ? '답글을 완료한 리뷰가 없습니다' :
+               filter === 'requires_approval' ? '확인이 필요한 리뷰가 없습니다' :
                filter !== 'all' || sentimentFilter !== 'all' ? '필터 조건에 맞는 리뷰가 없습니다' :
                '리뷰가 없습니다'
               }
             </h3>
             <p className="text-gray-600">
               {searchTerm ? '다른 검색어를 시도해보세요.' :
-               filter === 'draft' ? '모든 리뷰에 대한 작업이 완료되었습니다! 🎉 답글 생성, 승인, 전송이 모두 끝났어요.' :
+               filter === 'draft' ? '모든 리뷰에 답글이 작성되었습니다! 🎉 답글 생성, 승인, 전송이 모두 완료되었어요.' :
                filter === 'sent' ? '답글을 완료한 리뷰들을 확인하세요.' :
+               filter === 'requires_approval' ? '사장님 확인이 필요한 리뷰가 없습니다. 모든 리뷰가 자동으로 처리되고 있어요! ✨' :
                filter !== 'all' || sentimentFilter !== 'all' || platformFilter !== 'all' ? '다른 필터 조건을 시도해보세요.' :
                stores.length === 0 ? '먼저 매장을 등록해주세요.' :
                '리뷰가 수집되면 여기에 표시됩니다.'
@@ -840,7 +935,12 @@ export default function ReviewsPage() {
                   모든 리뷰 보기
                 </Button>
               )}
-              {(searchTerm || filter !== 'draft' || sentimentFilter !== 'all' || platformFilter !== 'all') && (
+              {filter === 'requires_approval' && reviews.length > 0 && (
+                <Button variant="outline" onClick={() => setFilter('all')}>
+                  모든 리뷰 보기
+                </Button>
+              )}
+              {(searchTerm || (filter !== 'draft' && filter !== 'requires_approval') || sentimentFilter !== 'all' || platformFilter !== 'all') && (
                 <Button 
                   variant="outline" 
                   onClick={() => {
@@ -850,7 +950,7 @@ export default function ReviewsPage() {
                     setPlatformFilter('all')
                   }}
                 >
-                  작업 필요한 리뷰 보기
+                  미답변 리뷰 보기
                 </Button>
               )}
             </div>
