@@ -168,14 +168,14 @@ class BaeminReviewCrawler:
             print(f"로그인 후 URL: {current_url}")
             
             if 'login' not in current_url:
-                print("✅ 배민 로그인 성공")
+                print("[SUCCESS] 배민 로그인 성공")
                 return True
             else:
-                print("❌ 배민 로그인 실패 - 로그인 페이지에 남아있음")
+                print("[ERROR] 배민 로그인 실패 - 로그인 페이지에 남아있음")
                 return False
                 
         except Exception as e:
-            print(f"❌ 로그인 중 오류: {str(e)}")
+            print(f"[ERROR] 로그인 중 오류: {str(e)}")
             return False
     
     async def _crawl_review_page(self, page, platform_store_id: str, days: int) -> List[Dict]:
@@ -190,10 +190,10 @@ class BaeminReviewCrawler:
                 await page.goto(review_url, wait_until='domcontentloaded', timeout=15000)
             except Exception as e:
                 # 타임아웃이 발생해도 페이지는 이미 이동했을 가능성이 높으므로 계속 진행
-                print(f"⚠️ 페이지 로드 타임아웃 (무시하고 진행): {str(e)}")
+                print(f"[WARNING] 페이지 로드 타임아웃 (무시하고 진행): {str(e)}")
             
             await page.wait_for_timeout(3000)
-            print("✅ 리뷰 페이지 로드 완료")
+            print("[SUCCESS] 리뷰 페이지 로드 완료")
             
             # 팝업 닫기 시도
             await self._close_popup_if_exists(page)
@@ -206,7 +206,7 @@ class BaeminReviewCrawler:
                 if date_dropdown:
                     await date_dropdown.click()
                     await page.wait_for_timeout(1000)
-                    print("✅ 날짜 드롭박스 열기 성공")
+                    print("[SUCCESS] 날짜 드롭박스 열기 성공")
                 
                 # 2. 라디오 버튼 선택
                 if days >= 30:
@@ -214,13 +214,13 @@ class BaeminReviewCrawler:
                     radio_30 = await page.query_selector('input[type="radio"][value="최근 30일"]')
                     if radio_30:
                         await radio_30.click()
-                        print("✅ 최근 30일 선택")
+                        print("[SUCCESS] 최근 30일 선택")
                 else:
                     # 최근 7일 선택  
                     radio_7 = await page.query_selector('input[type="radio"][value="최근 7일"]')
                     if radio_7:
                         await radio_7.click()
-                        print("✅ 최근 7일 선택")
+                        print("[SUCCESS] 최근 7일 선택")
                 
                 await page.wait_for_timeout(500)
                 
@@ -228,16 +228,16 @@ class BaeminReviewCrawler:
                 apply_button = await page.query_selector('button[type="button"]:has-text("적용")')
                 if apply_button:
                     await apply_button.click()
-                    print("✅ 적용 버튼 클릭")
+                    print("[SUCCESS] 적용 버튼 클릭")
                     await page.wait_for_timeout(2000)
                 
-                print(f"✅ 날짜 필터 적용 완료")
+                print(f"[SUCCESS] 날짜 필터 적용 완료")
             except Exception as e:
-                print(f"⚠️ 날짜 필터 선택 실패, 기본값(6개월) 사용: {str(e)}")
+                print(f"[WARNING] 날짜 필터 선택 실패, 기본값(6개월) 사용: {str(e)}")
             
             # 미답변 탭으로 이동하여 답변이 필요한 리뷰만 확인
             try:
-                print("🔍 미답변 탭 검색 중...")
+                print("[SEARCH] 미답변 탭 검색 중...")
                 
                 # JavaScript로 미답변 탭 찾기 및 클릭
                 unanswered_clicked = await page.evaluate('''() => {
@@ -278,15 +278,15 @@ class BaeminReviewCrawler:
                 if unanswered_clicked.get('success'):
                     if unanswered_clicked.get('action') == 'clicked':
                         await page.wait_for_timeout(3000)  # 탭 전환 대기
-                        print(f"✅ 미답변 탭 클릭 성공: {unanswered_clicked.get('text')}")
+                        print(f"[SUCCESS] 미답변 탭 클릭 성공: {unanswered_clicked.get('text')}")
                     else:
-                        print(f"✅ 미답변 탭 이미 활성화: {unanswered_clicked.get('text')}")
+                        print(f"[SUCCESS] 미답변 탭 이미 활성화: {unanswered_clicked.get('text')}")
                 else:
-                    print(f"⚠️ 미답변 탭 조작 실패: {unanswered_clicked.get('error')}")
+                    print(f"[WARNING] 미답변 탭 조작 실패: {unanswered_clicked.get('error')}")
                     print("전체 탭에서 미답변 리뷰만 필터링하여 진행")
                         
             except Exception as e:
-                print(f"ℹ️ 미답변 탭 처리 중 오류: {str(e)}")
+                print(f"[INFO] 미답변 탭 처리 중 오류: {str(e)}")
                 print("전체 탭에서 미답변 리뷰만 필터링하여 진행")
             
             # 리뷰 수집
@@ -408,7 +408,7 @@ class BaeminReviewCrawler:
                         else:
                             review_selector = container_info['tagName']
                         
-                        print(f"✅ 리뷰 컨테이너 발견: {review_selector}")
+                        print(f"[SUCCESS] 리뷰 컨테이너 발견: {review_selector}")
             except Exception as e:
                 print(f"리뷰어 기반 검색 실패: {str(e)}")
             
@@ -427,13 +427,13 @@ class BaeminReviewCrawler:
                             }''')
                             if container_info:
                                 review_selector = container_info
-                                print(f"✅ 리뷰번호 기반 컨테이너 발견: {review_selector}")
+                                print(f"[SUCCESS] 리뷰번호 기반 컨테이너 발견: {review_selector}")
                                 break
                 except Exception as e:
                     print(f"리뷰번호 기반 검색 실패: {str(e)}")
             
             if not review_selector:
-                print("⚠️ 리뷰 요소를 찾을 수 없습니다. 기본 선택자 사용")
+                print("[WARNING] 리뷰 요소를 찾을 수 없습니다. 기본 선택자 사용")
                 review_selector = "article, section, div"
             
             # 리뷰 요소 찾기 - 간단하고 직접적인 방법
@@ -496,7 +496,7 @@ class BaeminReviewCrawler:
                                 
                             # 중복 확인
                             if container_review_id and container_review_id in found_review_ids:
-                                print(f"    ⚠️ 중복 리뷰 컨테이너 건너뛰기 (ID: {container_review_id})")
+                                print(f"    [WARNING] 중복 리뷰 컨테이너 건너뛰기 (ID: {container_review_id})")
                                 continue
                             
                             # 직접 리뷰 ID로 요소 찾기 (클래스 기반 매칭 대신)
@@ -600,21 +600,21 @@ class BaeminReviewCrawler:
                                             
                                             review_elements.append(actual_elem)
                                             found_review_ids.add(container_review_id)
-                                            print(f"    ✅ 새로운 리뷰 컨테이너 추가 (ID: {container_review_id})")
+                                            print(f"    [SUCCESS] 새로운 리뷰 컨테이너 추가 (ID: {container_review_id})")
                                         else:
-                                            print(f"    ⚠️ 리뷰 요소를 ElementHandle로 변환 실패 (ID: {container_review_id})")
+                                            print(f"    [WARNING] 리뷰 요소를 ElementHandle로 변환 실패 (ID: {container_review_id})")
                                     else:
-                                        print(f"    ⚠️ 리뷰 ID로 요소 찾기 실패 (ID: {container_review_id})")
+                                        print(f"    [WARNING] 리뷰 ID로 요소 찾기 실패 (ID: {container_review_id})")
                                         
                                 except Exception as e:
-                                    print(f"    ❌ 리뷰 요소 찾기 중 오류 (ID: {container_review_id}): {str(e)}")
+                                    print(f"    [ERROR] 리뷰 요소 찾기 중 오류 (ID: {container_review_id}): {str(e)}")
                                     continue
                                         
                     except Exception as e:
                         print(f"리뷰 컨테이너 찾기 중 오류: {str(e)}")
                         continue
                 
-                print(f"✅ 총 {len(review_elements)}개의 리뷰 컨테이너 발견")
+                print(f"[SUCCESS] 총 {len(review_elements)}개의 리뷰 컨테이너 발견")
                 
             except Exception as e:
                 print(f"리뷰 컨테이너 검색 중 오류: {str(e)}")
@@ -707,7 +707,7 @@ class BaeminReviewCrawler:
             if reviewer_name:
                 review_data['reviewer_name'] = reviewer_name
             else:
-                print("  ⚠️ 리뷰어 이름을 찾을 수 없어 기본값 사용")
+                print("  [WARNING] 리뷰어 이름을 찾을 수 없어 기본값 사용")
             
             # 리뷰 날짜 추출 (다중 시도)
             from datetime import datetime
@@ -801,7 +801,7 @@ class BaeminReviewCrawler:
             if review_text:
                 review_data['review_text'] = review_text
             else:
-                print("  ⚠️ 리뷰 텍스트를 찾을 수 없어 빈 값 사용")
+                print("  [WARNING] 리뷰 텍스트를 찾을 수 없어 빈 값 사용")
             
             # 주문 메뉴 - Badge 컴포넌트 내부의 메뉴명 (신구조 모두 지원)
             menu_elements = await review_element.query_selector_all("ul.ReviewMenus-module__WRZI span.Badge_b_pnsa_19agxiso")
@@ -828,7 +828,7 @@ class BaeminReviewCrawler:
                 review_data['rating'] = rating
             else:
                 # 별점을 찾지 못한 경우 디버깅 정보 출력
-                print(f"  ⚠️ 별점 추출 실패, 기본값 5 사용")
+                print(f"  [WARNING] 별점 추출 실패, 기본값 5 사용")
             
             # 리뷰 ID 생성
             review_data['baemin_review_id'] = await self._generate_review_id(review_element)
@@ -1019,15 +1019,15 @@ class BaeminReviewCrawler:
                             await close_button.click()
                             await page.wait_for_timeout(1000)
                             
-                            print(f"✅ 배민 팝업 닫기 성공: {selector}")
+                            print(f"[SUCCESS] 배민 팝업 닫기 성공: {selector}")
                             
                             # 팝업이 실제로 사라졌는지 확인
                             popup_gone = await page.query_selector('div[role="dialog"]')
                             if not popup_gone:
-                                print("✅ 팝업 완전 제거 확인됨")
+                                print("[SUCCESS] 팝업 완전 제거 확인됨")
                                 return True
                             else:
-                                print("⚠️ 팝업이 여전히 존재함, 다른 방법 시도")
+                                print("[WARNING] 팝업이 여전히 존재함, 다른 방법 시도")
                         else:
                             print(f"   버튼이 보이지 않음: {selector}")
                     
@@ -1063,7 +1063,7 @@ class BaeminReviewCrawler:
                 """)
                 
                 await page.wait_for_timeout(1000)
-                print("✅ JavaScript로 팝업 강제 제거 완료")
+                print("[SUCCESS] JavaScript로 팝업 강제 제거 완료")
                 return True
                 
             except Exception as e:
@@ -1071,20 +1071,20 @@ class BaeminReviewCrawler:
             
             # 3차 시도: ESC 키로 닫기
             try:
-                print("⌨️ ESC 키로 팝업 닫기 시도...")
+                print("[KEYBOARD] ESC 키로 팝업 닫기 시도...")
                 await page.keyboard.press('Escape')
                 await page.wait_for_timeout(1000)
                 
                 # 팝업이 사라졌는지 확인
                 popup_exists = await page.query_selector('div[role="dialog"]')
                 if not popup_exists:
-                    print("✅ ESC 키로 팝업 닫기 성공")
+                    print("[SUCCESS] ESC 키로 팝업 닫기 성공")
                     return True
                     
             except Exception as e:
                 print(f"ESC 키 팝업 닫기 실패: {str(e)}")
             
-            print("⚠️ 모든 팝업 닫기 시도 실패 (무시하고 계속 진행)")
+            print("[WARNING] 모든 팝업 닫기 시도 실패 (무시하고 계속 진행)")
             return False
             
         except Exception as e:
@@ -1206,7 +1206,7 @@ class BaeminReviewCrawler:
                         print(f"실패한 데이터: {review_data}")
                     continue
             
-            print(f"✅ {successfully_saved}개의 새 리뷰 저장 완료")
+            print(f"[SUCCESS] {successfully_saved}개의 새 리뷰 저장 완료")
             insert_result = {'data': True}  # 성공 플래그 설정
             
             if successfully_saved > 0 or reviews_new == 0:

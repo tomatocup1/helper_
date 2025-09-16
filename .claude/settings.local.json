@@ -10,7 +10,11 @@
       "Bash(find:*)",
       "Bash(git add:*)",
       "Read(//c/Users/huni/Desktop/**)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(sed:*)",
+      "Bash(timeout:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": [],

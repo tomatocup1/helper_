@@ -106,7 +106,7 @@ class YogiyoReplyPoster:
     async def run(
         self,
         platform_store_uuid: str,
-        limit: int = 10,
+        limit: int = None,
         dry_run: bool = False,
         username: Optional[str] = None,
         password: Optional[str] = None
@@ -1219,7 +1219,7 @@ async def main():
     parser = argparse.ArgumentParser(description='Yogiyo Reply Poster')
     parser.add_argument('--store-uuid', type=str, help='Platform store UUID')
     parser.add_argument('--dry-run', action='store_true', help='Dry run mode (no actual posting)')
-    parser.add_argument('--limit', type=int, default=5, help='Maximum number of reviews to process')
+    # --limit 제거 (전체 미답변 리뷰 처리)
     
     args = parser.parse_args()
     
@@ -1262,7 +1262,7 @@ async def main():
         poster = YogiyoReplyPoster()
         result = await poster.run(
             platform_store_uuid=store_uuid,
-            limit=args.limit,
+            limit=None,  # 전체 미답변 리뷰 처리
             dry_run=args.dry_run
         )
         

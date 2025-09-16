@@ -122,7 +122,7 @@ class NaverReplyPoster:
         
         return branded_reply
     
-    async def fetch_pending_replies(self, limit: int = 10) -> List[ReplyTask]:
+    async def fetch_pending_replies(self, limit: int = None) -> List[ReplyTask]:
         """
         Supabase에서 등록 대기 중인 답글 가져오기
         
@@ -143,7 +143,7 @@ class NaverReplyPoster:
                 'reply_sent_at', 'null'
             ).not_.is_(
                 'ai_generated_reply', 'null'
-            ).limit(limit).execute()
+            ).limit(limit if limit else 1000).execute()  # limit이 None이면 최대 1000개
             
             logger.info(f"🔍 조회된 리뷰 수: {len(reviews_response.data)}개")
             
@@ -751,6 +751,101 @@ class NaverReplyPoster:
             self.stats["failed"] += 1
             return False
     
+    async def find_review_with_scroll(self, page, target_review_id: str, max_scroll_attempts: int = 20):
+        """무한 스크롤 환경에서 리뷰 ID로 리뷰 찾기 (실시간 처리)"""
+        try:
+            logger.info(f"🔄 무한 스크롤로 리뷰 찾기 시작: {target_review_id}")
+
+            scroll_count = 0
+            last_review_count = 0
+            no_change_count = 0
+
+            while scroll_count < max_scroll_attempts:
+                # 현재 페이지의 모든 결제 정보 링크 확인
+                payment_link_selectors = [
+                    "a[href*='/my/review/'][data-pui-click-code='rv.paymentinfo']",
+                    "a[data-pui-click-code='rv.paymentinfo']",
+                    "a[href*='/my/review/']"
+                ]
+
+                found_review = None
+                current_review_count = 0
+
+                for selector in payment_link_selectors:
+                    try:
+                        payment_links = await page.query_selector_all(selector)
+                        current_review_count = len(payment_links)
+
+                        logger.info(f"📋 [{scroll_count + 1}] 스크롤 후 발견된 리뷰: {current_review_count}개")
+
+                        for link in payment_links:
+                            href = await link.get_attribute("href")
+                            if href and "/my/review/" in href:
+                                import re
+                                match = re.search(r'/my/review/([a-f0-9]{24})', href)
+                                if match:
+                                    review_id = match.group(1)
+
+                                    # 정확한 매칭 확인
+                                    if review_id == target_review_id:
+                                        logger.info(f"✅ 리뷰 발견! ID: {review_id}")
+
+                                        # 리뷰 컨테이너 찾기
+                                        review_container = await link.evaluate_handle("""
+                                            element => {
+                                                let current = element;
+                                                while (current && current.parentElement) {
+                                                    current = current.parentElement;
+                                                    if (current.classList && (
+                                                        current.classList.contains('pui__X35jYm') ||
+                                                        current.classList.contains('Review_pui_review__zhZdn') ||
+                                                        current.tagName === 'LI'
+                                                    )) {
+                                                        return current;
+                                                    }
+                                                }
+                                                return null;
+                                            }
+                                        """)
+
+                                        if review_container:
+                                            return review_container
+
+                        if found_review:
+                            break
+
+                    except Exception as e:
+                        logger.warning(f"선택자 '{selector}' 처리 중 오류: {e}")
+                        continue
+
+                # 리뷰를 찾았으면 반환
+                if found_review:
+                    return found_review
+
+                # 새로운 리뷰가 로드되지 않으면 계속 스크롤
+                if current_review_count <= last_review_count:
+                    no_change_count += 1
+                    if no_change_count >= 3:
+                        logger.warning(f"⚠️ 3회 연속 새 리뷰 없음. 스크롤 중단.")
+                        break
+                else:
+                    no_change_count = 0
+
+                last_review_count = current_review_count
+
+                # 페이지 아래로 스크롤
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await asyncio.sleep(2)  # 로딩 대기
+
+                scroll_count += 1
+
+            logger.warning(f"❌ 리뷰를 찾을 수 없음: {target_review_id} (총 {scroll_count}회 스크롤)")
+            return None
+
+        except Exception as e:
+            logger.error(f"무한 스크롤 리뷰 찾기 중 오류: {e}")
+            return None
+
     async def find_review_by_id(self, page, target_review_id: str):
         """리뷰 ID로 리뷰 엘리먼트 찾기 (사용자 제공 HTML 구조 기반)"""
         try:
@@ -1144,8 +1239,8 @@ class NaverReplyPoster:
                 await page.goto(review_url, wait_until="networkidle", timeout=30000)
                 await self.setup_date_filter(page)
             
-            # 리뷰 찾기 및 내용 분석 (네이버 리뷰 ID 사용)
-            review_element = await self.find_review_by_id(page, task.naver_review_id)
+            # 리뷰 찾기 및 내용 분석 (무한 스크롤 지원)
+            review_element = await self.find_review_with_scroll(page, task.naver_review_id)
             if not review_element:
                 logger.warning(f"❌ 리뷰를 찾을 수 없습니다: {task.reviewer_name}")
                 await self.update_reply_status(task.review_id, success=False, error_message="리뷰를 찾을 수 없음")
@@ -1379,16 +1474,15 @@ class NaverReplyPoster:
             logger.error(f"상태 업데이트 실패: {e}")
             self.stats["errors"].append(f"DB 업데이트 실패: {str(e)}")
     
-    async def process_replies(self, limit: int = 10, dry_run: bool = False):
+    async def process_replies(self, dry_run: bool = False):
         """
-        답글 등록 프로세스 실행
-        
+        답글 등록 프로세스 실행 (전체 미답변 리뷰 처리)
+
         Args:
-            limit: 처리할 최대 답글 수
             dry_run: True면 실제 등록하지 않고 시뮬레이션만
         """
-        # 대기 중인 답글 가져오기
-        tasks = await self.fetch_pending_replies(limit)
+        # 대기 중인 답글 모두 가져오기 (limit 제거)
+        tasks = await self.fetch_pending_replies(limit=None)
         
         if not tasks:
             logger.info("처리할 답글이 없습니다.")
@@ -1511,14 +1605,14 @@ async def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='네이버 답글 자동 등록')
-    parser.add_argument('--limit', type=int, default=10, help='처리할 최대 답글 수')
     parser.add_argument('--dry-run', action='store_true', help='실제 등록하지 않고 시뮬레이션')
-    
+    # --limit 매개변수 제거 (전체 미답변 리뷰 처리)
+
     args = parser.parse_args()
-    
+
     try:
         poster = NaverReplyPoster()
-        await poster.process_replies(limit=args.limit, dry_run=args.dry_run)
+        await poster.process_replies(dry_run=args.dry_run)
     except KeyboardInterrupt:
         logger.info("\n사용자에 의해 중단되었습니다.")
     except Exception as e:

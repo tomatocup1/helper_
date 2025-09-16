@@ -128,13 +128,15 @@ class PlatformOrchestrator:
 
             logger.info(f"[{platform}] 크롤링 시작: {store.store_name}")
 
-            # 크롤러 실행
+            # 크롤러 실행 (Windows 인코딩 문제 해결)
             result = subprocess.run(
                 cmd,
                 cwd=self.core_path,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5분 타임아웃
+                timeout=300,  # 5분 타임아웃
+                encoding='utf-8',
+                errors='replace'
             )
 
             execution_time = (datetime.now() - start_time).total_seconds()
@@ -194,7 +196,9 @@ class PlatformOrchestrator:
                 cwd=self.ai_reply_path,
                 capture_output=True,
                 text=True,
-                timeout=180  # 3분 타임아웃
+                timeout=600,  # 10분 타임아웃 (네이버는 무한스크롤로 시간이 더 필요)
+                encoding='utf-8',
+                errors='replace'
             )
 
             execution_time = (datetime.now() - start_time).total_seconds()
@@ -236,7 +240,7 @@ class PlatformOrchestrator:
                 error="EXCEPTION"
             )
 
-    async def run_reply_poster(self, platform: str, store: StoreInfo, limit: int = 10) -> ExecutionResult:
+    async def run_reply_poster(self, platform: str, store: StoreInfo) -> ExecutionResult:
         """특정 플랫폼의 답글 등록기 실행"""
         start_time = datetime.now()
         scripts = self.get_platform_scripts()
@@ -253,15 +257,17 @@ class PlatformOrchestrator:
             cmd = ["python", poster_script]
 
             if platform == 'naver':
-                cmd.extend(["--limit", str(limit)])
+                # 네이버: 전체 미답변 리뷰 처리 (limit 제거)
+                pass
             elif platform == 'baemin':
                 cmd.extend(["--store-id", store.platform_store_id])
             elif platform == 'yogiyo':
-                cmd.extend(["--limit", str(limit)])
+                # 요기요: 전체 미답변 리뷰 처리 (limit 제거)
+                pass
             elif platform == 'coupangeats':
                 cmd.extend([
-                    "--store-uuid", store.id,
-                    "--limit", str(limit)
+                    "--store-uuid", store.id
+                    # 쿠팡이츠: 전체 미답변 리뷰 처리 (limit 제거)
                 ])
 
             logger.info(f"[{platform}] 답글 등록 시작: {store.store_name}")
@@ -271,7 +277,9 @@ class PlatformOrchestrator:
                 cwd=self.core_path,
                 capture_output=True,
                 text=True,
-                timeout=180  # 3분 타임아웃
+                timeout=600,  # 10분 타임아웃 (네이버는 무한스크롤로 시간이 더 필요)
+                encoding='utf-8',
+                errors='replace'
             )
 
             execution_time = (datetime.now() - start_time).total_seconds()

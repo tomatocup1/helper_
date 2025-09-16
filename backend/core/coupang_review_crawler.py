@@ -30,13 +30,13 @@ from backend.services.shared.logger import get_logger
 from backend.services.shared.config import settings
 from backend.core.coupang_star_rating_extractor import CoupangStarRatingExtractor
 
-# 프록시 및 User-Agent 로테이션 시스템 import
+# 프록시 및 User-Agent 로테이션 시스템 import (optional)
 try:
     sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
     from free_proxy_manager import FreeProxyManager
     from user_agent_rotator import UserAgentRotator
 except ImportError:
-    logger.warning("프록시 및 User-Agent 로테이션 시스템을 가져올 수 없습니다. 기본 설정을 사용합니다.")
+    print("Warning: 프록시 및 User-Agent 로테이션 시스템을 가져올 수 없습니다. 기본 설정을 사용합니다.")
     FreeProxyManager = None
     UserAgentRotator = None
 
