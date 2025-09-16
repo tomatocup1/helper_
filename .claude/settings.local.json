@@ -14,7 +14,10 @@
       "Bash(mkdir:*)",
       "Bash(sed:*)",
       "Bash(timeout:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(npm install:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": [],

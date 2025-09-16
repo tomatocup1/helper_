@@ -1706,6 +1706,9 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(234 179 8 / var(--tw-bg-opacity, 1));
 }
+.bg-primary\/20 {
+  background-color: hsl(var(--primary) / 0.2);
+}
 .bg-opacity-50 {
   --tw-bg-opacity: 0.5;
 }
