@@ -1,0 +1,115 @@
+2025-08-27 14:49:46,196 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-27 14:49:46,238 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=%2A&platform_store_id=eq.9ef8365d-2e4b-4dfc-8a32-6b591ee27ad8&reply_status=eq.approved "HTTP/1.1 200 OK"
+2025-08-27 14:49:46,334 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=%2A&platform_store_id=eq.9ef8365d-2e4b-4dfc-8a32-6b591ee27ad8&reply_status=eq.draft&limit=1 "HTTP/1.1 200 OK"
+2025-08-27 14:49:46,382 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.c05cc064-91de-42c7-b07b-d408a3b15280 "HTTP/1.1 400 Bad Request"
+2025-08-27 14:50:22,528 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-27 14:50:22,584 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=%2A&platform_store_id=eq.9ef8365d-2e4b-4dfc-8a32-6b591ee27ad8&reply_status=eq.draft&limit=5 "HTTP/1.1 200 OK"
+2025-08-27 14:50:22,585 - core.yogiyo_reply_poster - INFO - YogiyoReplyPoster 초기화 완료
+2025-08-27 14:50:22,585 - core.yogiyo_reply_poster - INFO - 요기요 답글 등록 시작 - Store UUID: 9ef8365d-2e4b-4dfc-8a32-6b591ee27ad8
+2025-08-27 14:50:22,697 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.9ef8365d-2e4b-4dfc-8a32-6b591ee27ad8&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-27 14:50:22,698 - core.yogiyo_reply_poster - INFO - 매장 정보 조회 성공: 큰집닭강정-오산역점 (1371806)
+2025-08-27 14:50:22,721 - core.yogiyo_reply_poster - INFO - DB에서 조회한 로그인 정보 사용
+2025-08-27 14:50:22,721 - core.yogiyo_reply_poster - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-08-27 14:50:22,761 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id&platform_store_id=eq.9ef8365d-2e4b-4dfc-8a32-6b591ee27ad8&reply_status=eq.draft&reply_text=neq.None&limit=3 "HTTP/1.1 200 OK"
+2025-08-27 14:50:22,761 - core.yogiyo_reply_poster - INFO - 답글 대기 리뷰 1개 발견
+2025-08-27 14:50:22,761 - core.yogiyo_reply_poster - INFO - 1개 답글 처리 예정
+2025-08-27 14:50:22,762 - core.yogiyo_reply_poster - INFO - DRY RUN 모드 - 실제 등록하지 않음
+2025-08-27 14:50:22,762 - core.yogiyo_reply_poster - INFO - 리소스 정리 완료
+2025-08-29 10:54:38,172 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-08-29 10:54:38,175 - __main__ - INFO - 매장 선택: 큰집닭강정-오산역점 (UUID: ee242a8d-1b7b-4be2-9ec7-f96ffa69e475)
+2025-08-29 10:54:38,175 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-08-29 10:54:38,176 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: ee242a8d-1b7b-4be2-9ec7-f96ffa69e475
+2025-08-29 10:54:38,244 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.ee242a8d-1b7b-4be2-9ec7-f96ffa69e475&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-29 10:54:38,244 - __main__ - INFO - 매장 정보 조회 성공: 큰집닭강정-오산역점 (1371806)
+2025-08-29 10:54:38,266 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-08-29 10:54:38,266 - __main__ - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-08-29 10:54:38,305 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating&platform_store_id=eq.ee242a8d-1b7b-4be2-9ec7-f96ffa69e475&reply_status=eq.draft&reply_text=is.None&limit=5 "HTTP/1.1 400 Bad Request"
+2025-08-29 10:54:38,306 - __main__ - ERROR - 답글 대기 리뷰 조회 실패: {'code': 'PGRST100', 'details': 'unexpected "n" expecting isVal: (null, not_null, true, false, unknown)', 'hint': None, 'message': '"failed to parse filter (is.None)" (line 1, column 6)'}
+2025-08-29 10:54:38,306 - __main__ - INFO - 처리할 답글이 없습니다
+2025-08-29 10:54:38,306 - __main__ - INFO - 리소스 정리 완료
+2025-08-29 10:54:52,377 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-08-29 10:54:52,377 - __main__ - INFO - 매장 선택: 큰집닭강정-오산역점 (UUID: ee242a8d-1b7b-4be2-9ec7-f96ffa69e475)
+2025-08-29 10:54:52,377 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-08-29 10:54:52,377 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: ee242a8d-1b7b-4be2-9ec7-f96ffa69e475
+2025-08-29 10:54:52,435 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.ee242a8d-1b7b-4be2-9ec7-f96ffa69e475&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-29 10:54:52,437 - __main__ - INFO - 매장 정보 조회 성공: 큰집닭강정-오산역점 (1371806)
+2025-08-29 10:54:52,467 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-08-29 10:54:52,468 - __main__ - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-08-29 10:54:52,505 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating&platform_store_id=eq.ee242a8d-1b7b-4be2-9ec7-f96ffa69e475&reply_status=eq.draft&reply_text=is.null&limit=5 "HTTP/1.1 200 OK"
+2025-08-29 10:54:52,506 - __main__ - INFO - 답글 대기 리뷰가 없습니다
+2025-08-29 10:54:52,507 - __main__ - INFO - 처리할 답글이 없습니다
+2025-08-29 10:54:52,507 - __main__ - INFO - 리소스 정리 완료
+2025-08-29 10:55:32,044 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-08-29 10:55:32,044 - __main__ - INFO - 매장 선택: 큰집닭강정-오산역점 (UUID: ee242a8d-1b7b-4be2-9ec7-f96ffa69e475)
+2025-08-29 10:55:32,044 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-08-29 10:55:32,044 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: ee242a8d-1b7b-4be2-9ec7-f96ffa69e475
+2025-08-29 10:55:32,103 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.ee242a8d-1b7b-4be2-9ec7-f96ffa69e475&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-29 10:55:32,105 - __main__ - INFO - 매장 정보 조회 성공: 큰집닭강정-오산역점 (1371806)
+2025-08-29 10:55:32,146 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-08-29 10:55:32,147 - __main__ - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-08-29 10:55:32,198 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating&platform_store_id=eq.ee242a8d-1b7b-4be2-9ec7-f96ffa69e475&reply_status=eq.draft&reply_text=neq.null&limit=5 "HTTP/1.1 200 OK"
+2025-08-29 10:55:32,198 - __main__ - INFO - 답글 대기 리뷰가 없습니다
+2025-08-29 10:55:32,198 - __main__ - INFO - 처리할 답글이 없습니다
+2025-08-29 10:55:32,198 - __main__ - INFO - 리소스 정리 완료
+2025-08-29 10:56:48,831 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&id=eq.430ead2f-f69e-4f29-80e5-c00cddbf519c&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-29 10:56:48,834 - __main__ - INFO - 매장 선택: 큰손닭강정-오산역점 (UUID: 430ead2f-f69e-4f29-80e5-c00cddbf519c)
+2025-08-29 10:56:48,834 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-08-29 10:56:48,834 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 430ead2f-f69e-4f29-80e5-c00cddbf519c
+2025-08-29 10:56:48,882 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.430ead2f-f69e-4f29-80e5-c00cddbf519c&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-29 10:56:48,882 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-오산역점 (1409009)
+2025-08-29 10:56:48,918 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-08-29 10:56:48,919 - __main__ - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-08-29 10:56:48,982 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating&platform_store_id=eq.430ead2f-f69e-4f29-80e5-c00cddbf519c&reply_status=eq.draft&reply_text=neq.null&limit=3 "HTTP/1.1 200 OK"
+2025-08-29 10:56:48,982 - __main__ - INFO - 답글 대기 리뷰 3개 발견
+2025-08-29 10:56:48,982 - __main__ - INFO - 3개 답글 처리 예정
+2025-08-29 10:56:48,983 - __main__ - INFO - DRY RUN 모드 - 실제 등록하지 않음
+2025-08-29 10:56:48,983 - __main__ - INFO - 리소스 정리 완료
+2025-08-29 11:06:08,791 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&id=eq.430ead2f-f69e-4f29-80e5-c00cddbf519c&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-29 11:06:08,791 - __main__ - INFO - 매장 선택: 큰손닭강정-오산역점 (UUID: 430ead2f-f69e-4f29-80e5-c00cddbf519c)
+2025-08-29 11:06:08,792 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-08-29 11:06:08,792 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 430ead2f-f69e-4f29-80e5-c00cddbf519c
+2025-08-29 11:06:08,836 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.430ead2f-f69e-4f29-80e5-c00cddbf519c&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-08-29 11:06:08,836 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-오산역점 (1409009)
+2025-08-29 11:06:08,848 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-08-29 11:06:08,848 - __main__ - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-08-29 11:06:08,882 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating&platform_store_id=eq.430ead2f-f69e-4f29-80e5-c00cddbf519c&reply_status=eq.draft&reply_text=neq.null&limit=5 "HTTP/1.1 200 OK"
+2025-08-29 11:06:08,882 - __main__ - INFO - 답글 대기 리뷰 2개 발견
+2025-08-29 11:06:08,882 - __main__ - INFO - 2개 답글 처리 예정
+2025-08-29 11:06:09,838 - __main__ - INFO - 브라우저 초기화 완료
+2025-08-29 11:06:09,838 - __main__ - INFO - 요기요 CEO 로그인 시작
+2025-08-29 11:06:28,791 - __main__ - INFO - 로그인 성공 (URL: https://ceo.yogiyo.co.kr/)
+2025-08-29 11:06:28,791 - __main__ - INFO - 로그인 성공
+2025-08-29 11:06:28,793 - __main__ - INFO - 리뷰 페이지로 이동
+2025-08-29 11:06:32,038 - __main__ - INFO - 매장 선택: 1409009
+2025-08-29 11:06:32,184 - __main__ - INFO - 드롭다운 클릭 성공: div.StoreSelector__SelectedStore-sc-1rowjsb-13
+2025-08-29 11:06:34,244 - __main__ - INFO - 매장 선택 완료: 1409009
+2025-08-29 11:06:39,327 - __main__ - INFO - 미답변 탭 클릭 성공: 미답변 (2)
+2025-08-29 11:06:39,327 - __main__ - INFO - 미답변 탭 클릭 완료
+2025-08-29 11:06:39,333 - __main__ - INFO - 리뷰 컨테이너 2개 발견
+2025-08-29 11:06:39,428 - __main__ - INFO - 페이지에서 2개 리뷰 추출
+2025-08-29 11:06:39,431 - __main__ - WARNING - DSID 완전 매칭 실패: 868c59d4bdd7247b
+2025-08-29 11:06:39,431 - __main__ - INFO - 콘텐츠 기반 매칭 시도...
+2025-08-29 11:06:39,431 - __main__ - INFO - 🎯 콘텐츠 매칭 성공 (점수: 3/4)
+2025-08-29 11:06:39,431 - __main__ - INFO -    👤 리뷰어: jh** ✅
+2025-08-29 11:06:39,431 - __main__ - INFO -    📝 내용: 맛있어요... ✅
+2025-08-29 11:06:39,431 - __main__ - INFO -    📅 날짜: 6시간 전 ❌
+2025-08-29 11:06:39,431 - __main__ - INFO -    ⭐ 별점: 5.0 ✅
+2025-08-29 11:06:39,432 - __main__ - INFO - 답글 등록 시작 (리뷰 인덱스: 0)
+2025-08-29 11:06:39,441 - __main__ - INFO - 답글 버튼 발견: button.ReviewReply__AddReplyButton-sc-1536a88-10:has-text("댓글쓰기")
+2025-08-29 11:06:41,503 - __main__ - INFO - 답글 입력창 발견: textarea.ReviewReply__CustomTextarea-sc-1536a88-5
+2025-08-29 11:06:44,494 - __main__ - INFO - 답글 입력 완료: jh**님, 맛있게 드셨다니 정말 기...
+2025-08-29 11:06:44,501 - __main__ - INFO - 등록 버튼 발견: div.ReviewReply__ActionButtonWrapper-sc-1536a88-8 button:has-text("등록")
+2025-08-29 11:06:47,532 - __main__ - INFO - 답글 등록 버튼 클릭 완료
+2025-08-29 11:06:49,544 - __main__ - WARNING - 답글 등록 확인 실패
+2025-08-29 11:06:49,671 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.62da1f02-8589-4b53-bd20-854252a59317 "HTTP/1.1 200 OK"
+2025-08-29 11:06:52,683 - __main__ - WARNING - DSID 완전 매칭 실패: a86219f0537fc200
+2025-08-29 11:06:52,683 - __main__ - INFO - 콘텐츠 기반 매칭 시도...
+2025-08-29 11:06:52,683 - __main__ - INFO - 🎯 콘텐츠 매칭 성공 (점수: 3/4)
+2025-08-29 11:06:52,683 - __main__ - INFO -    👤 리뷰어: al** ✅
+2025-08-29 11:06:52,683 - __main__ - INFO -    📝 내용: 가끔 먹고싶을때마다 먹는데 너무 맛있... ✅
+2025-08-29 11:06:52,683 - __main__ - INFO -    📅 날짜: 2025.08.28 ❌
+2025-08-29 11:06:52,684 - __main__ - INFO -    ⭐ 별점: 5.0 ✅
+2025-08-29 11:06:52,684 - __main__ - INFO - 답글 등록 시작 (리뷰 인덱스: 1)
+2025-08-29 11:06:52,688 - __main__ - ERROR - 리뷰 인덱스 1가 범위를 벗어남
+2025-08-29 11:06:52,688 - __main__ - INFO - 답글 등록 완료 - 성공: 1, 실패: 1
+2025-08-29 11:06:52,892 - __main__ - INFO - 리소스 정리 완료

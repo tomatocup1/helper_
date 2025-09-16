@@ -1,0 +1,5 @@
+{
+  "/owner-replies/reviews/page": "app/owner-replies/reviews/page.js",
+  "/owner-replies/settings/page": "app/owner-replies/settings/page.js",
+  "/stores/page": "app/stores/page.js"
+}

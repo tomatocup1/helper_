@@ -1,0 +1,114 @@
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \u23f0 현재 시각: 2025-09-16T14:18:19.394294
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \u2705 답글 등록 시간 도달: 1KFMDK (예정: 2025-09-16T00:00:00)
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \u23f3 답글 등록 대기: 12HNVG (남은 시간: 1 day, 9:41:40.605706)
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \u2705 답글 등록 시간 도달: 20BY0W (예정: 2025-09-16T00:00:00)
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \u2705 답글 등록 시간 도달: 0DAK9D (예정: 2025-09-16T00:00:00)
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \u23f3 답글 등록 대기: 0RA5PD (남은 시간: 9:41:40.605706)
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \U0001f4cb schedulable_reply_date 필터링 결과:
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO -     - 전체 조회: 5개
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO -     - 즉시 처리: 3개
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO -     - 예약 대기: 2개
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - 답글이 필요한 리뷰: 3개
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \U0001f6e1\ufe0f 중복 방지 시스템 활성화 - 현재 세션 리뷰 목록 저장 완료
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \U0001f310 연결 방식: 직접 연결 (프록시 비활성화)
+2025-09-16 14:18:19 - backend.core.coupang_reply_poster - INFO - \U0001f3ad User-Agent: 브라우저 기본값 사용
+2025-09-16 14:18:20 - backend.core.coupang_reply_poster - INFO - 로그인 시도 1/5
+2025-09-16 14:18:20 - backend.core.coupang_reply_poster - INFO - \U0001f680 Enhanced 쿠팡잇츠 로그인 시작...
+2025-09-16 14:18:20 - backend.core.coupang_reply_poster - INFO - 로그인 페이지로 이동 중...
+2025-09-16 14:18:26 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] \U0001f4cb 클립보드 로그인 시작...
+2025-09-16 14:18:26 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] ID 입력 완료
+2025-09-16 14:18:26 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] PW 입력 완료
+2025-09-16 14:18:26 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] \U0001f3af 로그인 버튼 클릭...
+2025-09-16 14:18:27 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] \u2705 랜덤 위치 클릭: (864.9, 396.2)
+2025-09-16 14:18:27 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] \U0001f680 로그인 버튼 클릭 완료 - 응답 대기 시작
+2025-09-16 14:18:27 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] 빠른 실패 감지 중 (3초)...
+2025-09-16 14:18:28 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] URL 변경 감지! 성공 가능성 있음: https://store.coupangeats.com/merchant/management
+2025-09-16 14:18:28 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] 로그인 후 최종 URL: https://store.coupangeats.com/merchant/management
+2025-09-16 14:18:28 - backend.core.coupang_reply_poster - INFO - [ReplyPoster] 로그인 성공 (URL 기준)
+2025-09-16 14:18:28 - backend.core.coupang_reply_poster - INFO - \U0001f389 로그인 성공! (시도 1번째)
+2025-09-16 14:18:28 - backend.core.coupang_reply_poster - INFO - 리뷰 페이지로 이동...
+2025-09-16 14:18:30 - backend.core.coupang_reply_poster - INFO - 리뷰 페이지 이동 완료
+2025-09-16 14:18:32 - backend.core.coupang_reply_poster - INFO - 모달 창 탐지 및 닫기 시작...
+2025-09-16 14:18:32 - backend.core.coupang_reply_poster - INFO - \u2705 쿠팡잇츠 Speak Up 모달 닫기 성공 (dialog-modal-wrapper__body--close-button)
+2025-09-16 14:18:33 - backend.core.coupang_reply_poster - INFO - 모달 창 탐지 및 닫기 시작...
+2025-09-16 14:18:33 - backend.core.coupang_reply_poster - INFO - \u2705 모달 창 닫기 성공: button:has(svg)
+2025-09-16 14:18:36 - backend.core.coupang_reply_poster - INFO - 모달 창 탐지 및 닫기 시작...
+2025-09-16 14:18:36 - backend.core.coupang_reply_poster - INFO - \u2705 모달 창 닫기 성공: button:has(svg)
+2025-09-16 14:18:37 - backend.core.coupang_reply_poster - INFO - 모달 창 탐지 및 닫기 시작...
+2025-09-16 14:18:38 - backend.core.coupang_reply_poster - INFO - \u2705 모달 창 닫기 성공: button:has(svg)
+2025-09-16 14:18:39 - backend.core.coupang_reply_poster - INFO - 매장 선택: 708561
+2025-09-16 14:18:40 - backend.core.coupang_reply_poster - INFO - 매장 선택 완료: 큰집닭강정(708561)
+2025-09-16 14:18:41 - backend.core.coupang_reply_poster - INFO - 날짜 필터 적용: 최근 7일
+2025-09-16 14:18:41 - backend.core.coupang_reply_poster - INFO - 날짜 드롭다운 발견: .css-1rkgd7l.eylfi1j5
+2025-09-16 14:18:43 - backend.core.coupang_reply_poster - INFO - 날짜 라디오 버튼 발견 (보임): label:has(input[type="radio"][value="1"])
+2025-09-16 14:18:43 - backend.core.coupang_reply_poster - INFO - \u2705 최근 1주일 선택 클릭 성공
+2025-09-16 14:18:45 - backend.core.coupang_reply_poster - INFO - 미답변 탭 클릭
+2025-09-16 14:18:45 - backend.core.coupang_reply_poster - INFO - 미답변 탭 발견: strong:has-text("미답변")
+2025-09-16 14:18:45 - backend.core.coupang_reply_poster - INFO - \u2705 미답변 탭 클릭 성공
+2025-09-16 14:18:48 - backend.core.coupang_reply_poster - INFO - \U0001f504 리뷰 처리 시작: 1KFMDK (총 처리 중: 1개)
+2025-09-16 14:18:48 - backend.core.coupang_reply_poster - INFO - 답글 포스팅 시작: 신** (ID: 1KFMDK)
+2025-09-16 14:18:48 - backend.core.coupang_reply_poster - INFO - 리뷰 검색 시작: ID=1KFMDK, 이름=신**
+2025-09-16 14:18:48 - backend.core.coupang_reply_poster - INFO - 페이지 1에서 리뷰 검색 중...
+2025-09-16 14:18:48 - backend.core.coupang_reply_poster - INFO - \u2705 주문번호 정확 매칭 성공: 1KFMDK
+2025-09-16 14:18:48 - backend.core.coupang_reply_poster - INFO - \u2705 테이블 행에서 답글 버튼 발견! (레벨 4)
+2025-09-16 14:18:48 - backend.core.coupang_reply_poster - INFO - \u2705 리뷰 발견: 페이지 1
+2025-09-16 14:18:50 - backend.core.coupang_reply_poster - INFO - 쿠팡이츠 등록 버튼 클릭 완료: 1KFMDK
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - \U0001f50d 쿠팡이츠 금지어 팝업 확인 중...
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - \u2705 쿠팡이츠 금지어 팝업 없음 - 등록 성공 검증 중...
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - 답글 상태 업데이트 완료: 09f2edc8-7046-4190-a514-5d7dd4ceebad -> sent
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - \u2705 답글 등록 완료: 신**
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - 답글 등록 완료: 신**
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - \u2705 리뷰 처리 완료: 1KFMDK
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - \U0001f504 리뷰 처리 시작: 20BY0W (총 처리 중: 2개)
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - 답글 포스팅 시작: 양** (ID: 20BY0W)
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - 리뷰 검색 시작: ID=20BY0W, 이름=양**
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - 페이지 1에서 리뷰 검색 중...
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - \u2705 주문번호 정확 매칭 성공: 20BY0W
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - \u2705 테이블 행에서 답글 버튼 발견! (레벨 4)
+2025-09-16 14:18:52 - backend.core.coupang_reply_poster - INFO - \u2705 리뷰 발견: 페이지 1
+2025-09-16 14:18:53 - backend.core.coupang_reply_poster - INFO - 쿠팡이츠 등록 버튼 클릭 완료: 20BY0W
+2025-09-16 14:18:55 - backend.core.coupang_reply_poster - INFO - \U0001f50d 쿠팡이츠 금지어 팝업 확인 중...
+2025-09-16 14:18:55 - backend.core.coupang_reply_poster - INFO - \u2705 쿠팡이츠 금지어 팝업 없음 - 등록 성공 검증 중...
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - 답글 상태 업데이트 완료: 91629be5-1c3b-4f82-a8ee-230dac4319f9 -> sent
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - \u2705 답글 등록 완료: 양**
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - 답글 등록 완료: 양**
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - \u2705 리뷰 처리 완료: 20BY0W
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - \U0001f504 리뷰 처리 시작: 0DAK9D (총 처리 중: 3개)
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - 답글 포스팅 시작: 전** (ID: 0DAK9D)
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - 리뷰 검색 시작: ID=0DAK9D, 이름=전**
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - 페이지 1에서 리뷰 검색 중...
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - \u2705 주문번호 정확 매칭 성공: 0DAK9D
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - \u2705 테이블 행에서 답글 버튼 발견! (레벨 4)
+2025-09-16 14:18:56 - backend.core.coupang_reply_poster - INFO - \u2705 리뷰 발견: 페이지 1
+2025-09-16 14:18:57 - backend.core.coupang_reply_poster - INFO - 쿠팡이츠 등록 버튼 클릭 완료: 0DAK9D
+2025-09-16 14:18:59 - backend.core.coupang_reply_poster - INFO - \U0001f50d 쿠팡이츠 금지어 팝업 확인 중...
+2025-09-16 14:18:59 - backend.core.coupang_reply_poster - INFO - \u2705 쿠팡이츠 금지어 팝업 없음 - 등록 성공 검증 중...
+2025-09-16 14:18:59 - backend.core.coupang_reply_poster - INFO - 답글 상태 업데이트 완료: 0129dc21-0496-4678-bd9e-d111c3b84635 -> sent
+2025-09-16 14:18:59 - backend.core.coupang_reply_poster - INFO - \u2705 답글 등록 완료: 전**
+2025-09-16 14:18:59 - backend.core.coupang_reply_poster - INFO - 답글 등록 완료: 전**
+2025-09-16 14:18:59 - backend.core.coupang_reply_poster - INFO - \u2705 리뷰 처리 완료: 0DAK9D
+Traceback (most recent call last):
+  File "C:\helper_B\backend\core\run_coupang_reply_poster.py", line 111, in main
+    print(f"     답글: {reply.get('reply_text', 'N/A')[:50]}...")
+UnicodeEncodeError: 'cp949' codec can't encode character '\U0001f60a' in position 38: illegal multibyte sequence
+Warning: 프록시 및 User-Agent 로테이션 시스템을 가져올 수 없습니다. 기본 설정을 사용합니다.
+[COUPANG] 쿠팡 답글 포스터 시작 (Enhanced 로그인)
+매장 UUID: 2a528120-06ae-462e-9ed9-946002618a9d
+최대 답글 수: 전체 (제한 없음)
+테스트 모드: 아니오
+
+[INFO] 매장 정보 조회 중...
+[SUCCESS] 매장 정보 조회 성공
+로그인 ID: hong7704002646
+플랫폼 매장 ID: 708561
+
+[INFO] Enhanced 로그인으로 답글 포스터 실행...
+
+[SUCCESS] 답글 포스터 완료!
+성공: True
+메시지: 답글 포스팅 완료: 3개
+등록된 답글: 3개
+
+[REPLIES] 등록된 답글 목록:
+  1. 리뷰ID: 09f2edc8-7046-4190-a514-5d7dd4ceebad
+[ERROR] 답글 포스터 실행 실패: 'cp949' codec can't encode character '\U0001f60a' in position 38: illegal multibyte sequence
