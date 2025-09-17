@@ -9,12 +9,42 @@ import uvicorn
 import os
 from pathlib import Path
 import sys
+from datetime import datetime
+from pydantic import BaseModel
+from typing import List, Optional
+from supabase import create_client, Client
 
 # Add core directory to path
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir / 'core'))
+sys.path.append(str(current_dir))
 
 app = FastAPI(title="Store Helper Backend API")
+
+# Supabase 설정
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://efcdjsrumdrhmpingglp.supabase.co")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmY2Rqc3J1bWRyaG1waW5nZ2xwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTU2Mzc0MiwiZXhwIjoyMDcxMTM5NzQyfQ.grPU1SM6Y7rYwxcAf8f_txT0h6_DmRl4G0s-cyWOGrI")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+# Pydantic 모델들
+class ReplySettings(BaseModel):
+    autoReplyEnabled: bool = False
+    replyTone: str = 'friendly'
+    minReplyLength: int = 50
+    maxReplyLength: int = 200
+    brandVoice: str = ""
+    greetingTemplate: str = ""
+    closingTemplate: str = ""
+    seoKeywords: List[str] = []
+    autoApprovalDelayHours: int = 48
+
+class StoreInfo(BaseModel):
+    id: str
+    store_name: str
+    platform: str
+    platform_store_id: str
+    auto_reply_enabled: bool
+    reply_tone: str
 
 # CORS 설정
 app.add_middleware(
