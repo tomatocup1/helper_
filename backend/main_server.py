@@ -57,6 +57,26 @@ except Exception as e:
     async def get_stores():
         return {"stores": [], "message": "Backend integration in progress"}
 
+    @app.get("/api/v1/stores")
+    async def get_v1_stores():
+        return {"stores": [], "message": "Backend integration in progress"}
+
+    @app.post("/api/v1/stores")
+    async def create_store(request: dict):
+        return {"success": False, "message": "Backend service unavailable"}
+
+    @app.get("/api/v1/stores/{store_id}")
+    async def get_store(store_id: str):
+        return {"store": None, "message": "Backend service unavailable"}
+
+    @app.put("/api/v1/stores/{store_id}")
+    async def update_store(store_id: str, request: dict):
+        return {"success": False, "message": "Backend service unavailable"}
+
+    @app.get("/api/user-stores/{user_id}")
+    async def get_user_stores(user_id: str):
+        return {"stores": [], "message": "Backend integration in progress"}
+
     @app.post("/api/v1/platform/connect")
     async def connect_platform(request: dict):
         return {"success": False, "message": "Backend service unavailable"}
