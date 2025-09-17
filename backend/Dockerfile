@@ -67,8 +67,8 @@ RUN useradd --uid 1001 --gid 1001 --create-home appuser
 # 작업 디렉토리 설정
 WORKDIR /app
 
-# 의존성 복사
-COPY --from=dependencies /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+# 의존성 복사 (Python 3.10 경로 사용)
+COPY --from=dependencies /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
 COPY --from=dependencies /usr/local/bin /usr/local/bin
 COPY --from=dependencies /ms-playwright /ms-playwright
 
