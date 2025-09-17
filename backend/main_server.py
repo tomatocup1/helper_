@@ -15,9 +15,6 @@ current_dir = Path(__file__).parent
 sys.path.append(str(current_dir))
 sys.path.append(str(current_dir / 'core'))
 
-# Import existing APIs
-from simple_baemin_api import app as baemin_app
-
 app = FastAPI(title="Store Helper Unified Backend API")
 
 # CORS 설정
@@ -43,8 +40,26 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
-# 기존 baemin_app의 모든 라우트를 마운트
-app.mount("/api", baemin_app)
+# Import and include all routes from simple_baemin_api
+try:
+    from simple_baemin_api import app as baemin_app
+
+    # baemin_app의 모든 라우트를 현재 앱에 복사
+    for route in baemin_app.routes:
+        app.router.routes.append(route)
+
+    print("Successfully included all routes from simple_baemin_api")
+except Exception as e:
+    print(f"Error importing simple_baemin_api: {e}")
+
+    # 기본 API 엔드포인트들 추가
+    @app.get("/api/stores")
+    async def get_stores():
+        return {"stores": [], "message": "Backend integration in progress"}
+
+    @app.post("/api/v1/platform/connect")
+    async def connect_platform(request: dict):
+        return {"success": False, "message": "Backend service unavailable"}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8001))
