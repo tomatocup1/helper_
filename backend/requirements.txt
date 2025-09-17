@@ -57,8 +57,8 @@ python-multipart==0.0.12
 email-validator==2.2.0
 jinja2==3.1.4
 
-# 알림톡 (카카오)
-kakao-python-sdk==1.0.0
+# 알림톡 (카카오) - 실제 API는 httpx로 직접 호출
+# kakao-python-sdk는 존재하지 않음, httpx 사용
 
 # 개발 도구 (개발 환경에서만)
 pytest==8.3.3
