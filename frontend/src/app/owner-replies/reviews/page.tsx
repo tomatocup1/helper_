@@ -402,8 +402,8 @@ export default function ReviewsPage() {
     // 네이버 제외하고 실제 평점이 있는 리뷰만으로 평균 계산
     averageRating: (() => {
       const reviewsWithRating = reviews.filter(r => r.rating && r.rating > 0);
-      return reviewsWithRating.length > 0 
-        ? (reviewsWithRating.reduce((acc, r) => acc + r.rating, 0) / reviewsWithRating.length).toFixed(1)
+      return reviewsWithRating.length > 0
+        ? (reviewsWithRating.reduce((acc, r) => acc + (r.rating || 0), 0) / reviewsWithRating.length).toFixed(1)
         : '0.0';
     })()
   }
