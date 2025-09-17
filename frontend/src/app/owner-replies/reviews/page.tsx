@@ -32,7 +32,7 @@ import {
 type ReviewsNaverRow = Database['public']['Tables']['reviews_naver']['Row']
 type PlatformStoreRow = Database['public']['Tables']['platform_stores']['Row']
 
-interface ReviewWithStore extends ReviewsNaverRow {
+interface ReviewWithStore extends Omit<ReviewsNaverRow, 'requires_approval'> {
   platform_store: PlatformStoreRow
   requires_approval?: boolean
   scheduled_reply_date?: string
