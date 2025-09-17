@@ -19,7 +19,13 @@ app = FastAPI(title="Store Helper Backend API")
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:4000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:4000",
+        "https://*.vercel.app",  # Vercel 배포 도메인
+        "https://store-helper-frontend.vercel.app",  # 특정 Vercel 앱
+        "*"  # 개발 중에는 모든 도메인 허용
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
