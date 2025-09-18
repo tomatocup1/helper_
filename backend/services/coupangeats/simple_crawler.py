@@ -258,8 +258,25 @@ class CoupangEatsCrawler:
                 print("[쿠팡이츠] 리뷰 페이지 로드 완료")
             except Exception as e:
                 print(f"[쿠팡이츠] 리뷰 페이지 로드 에러 (무시): {e}")
-                
+
             await page.wait_for_timeout(3000)
+
+            # 프로모션 모달 팝업 닫기 (있는 경우)
+            try:
+                print("[쿠팡이츠] 프로모션 모달 확인 중...")
+                modal_close_button = await page.wait_for_selector(
+                    'button[data-testid="Dialog__CloseButton"]',
+                    timeout=5000,
+                    state="visible"
+                )
+                if modal_close_button:
+                    print("[쿠팡이츠] 프로모션 모달 발견 - 닫기")
+                    await modal_close_button.click()
+                    await page.wait_for_timeout(1000)
+                    print("[쿠팡이츠] 프로모션 모달 닫기 완료")
+            except:
+                print("[쿠팡이츠] 프로모션 모달 없음 또는 이미 닫혀있음")
+                pass
             
             # 팝업 닫기
             await self.close_popup(page)
