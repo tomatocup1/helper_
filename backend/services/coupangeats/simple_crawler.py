@@ -337,13 +337,74 @@ class CoupangEatsCrawler:
 
                         # 3. 여전히 안되면 모달 배경이나 빈 공간 클릭
                         if not close_clicked:
-                            print("[쿠팡이츠] 닫기 버튼 없음 - 배경 클릭 및 키보드 시도...")
+                            print("[쿠팡이츠] 닫기 버튼 없음 - 다양한 빈 공간 클릭 시도...")
 
-                            # 모달 외부 클릭 (좌상단)
-                            await page.mouse.click(10, 10)
-                            await page.wait_for_timeout(1000)
+                            # 여러 빈 공간 위치 시도 (모달 외부)
+                            empty_click_positions = [
+                                (10, 10),      # 좌상단
+                                (50, 50),      # 좌상단2
+                                (10, 300),     # 좌중간
+                                (10, 500),     # 좌하단
+                                (1000, 10),    # 우상단
+                                (1000, 300),   # 우중간
+                                (500, 10),     # 상단 중앙
+                                (500, 600),    # 하단 중앙
+                                (200, 200),    # 중앙 좌측
+                                (800, 200)     # 중앙 우측
+                            ]
 
-                            # Enter와 Space 키도 시도
+                            for x, y in empty_click_positions:
+                                try:
+                                    print(f"[쿠팡이츠] 빈 공간 클릭 시도: ({x}, {y})")
+                                    await page.mouse.click(x, y)
+                                    await page.wait_for_timeout(800)
+
+                                    # 클릭 후 모달이 닫혔는지 확인
+                                    modal_check = False
+                                    for selector in modal_selectors:
+                                        if await page.query_selector(selector):
+                                            modal_check = True
+                                            break
+
+                                    if not modal_check:
+                                        print(f"[쿠팡이츠] 빈 공간 클릭으로 모달 닫기 성공: ({x}, {y})")
+                                        break
+                                except Exception as click_error:
+                                    print(f"[쿠팡이츠] 빈 공간 클릭 실패: {click_error}")
+                                    continue
+
+                            # 여전히 모달이 있다면 페이지 이동 트릭 시도
+                            modal_still_there = False
+                            for selector in modal_selectors:
+                                if await page.query_selector(selector):
+                                    modal_still_there = True
+                                    break
+
+                            if modal_still_there:
+                                print("[쿠팡이츠] 페이지 이동 트릭으로 모달 닫기 시도...")
+                                try:
+                                    # 현재 URL 저장
+                                    current_url = page.url
+                                    print(f"[쿠팡이츠] 현재 URL: {current_url}")
+
+                                    # 잠깐 다른 페이지로 이동했다가 바로 돌아오기
+                                    # 쿠팡이츠 관리 페이지 내에서 안전한 페이지
+                                    temp_url = "https://store.coupangeats.com/merchant/management"
+
+                                    print(f"[쿠팡이츠] 임시 페이지로 이동: {temp_url}")
+                                    await page.goto(temp_url)
+                                    await page.wait_for_timeout(1000)
+
+                                    print(f"[쿠팡이츠] 원래 페이지로 복귀: {current_url}")
+                                    await page.goto(current_url)
+                                    await page.wait_for_timeout(2000)
+
+                                    print("[쿠팡이츠] 페이지 이동 트릭 완료 - 모달 확인...")
+
+                                except Exception as nav_error:
+                                    print(f"[쿠팡이츠] 페이지 이동 트릭 실패: {nav_error}")
+
+                            # 키보드 시도
                             await page.keyboard.press("Enter")
                             await page.wait_for_timeout(500)
                             await page.keyboard.press("Space")
