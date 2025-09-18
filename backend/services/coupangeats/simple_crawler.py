@@ -254,8 +254,21 @@ class CoupangEatsCrawler:
             # 3. 리뷰 페이지로 이동
             print("[쿠팡이츠] 리뷰 페이지로 이동")
             try:
+                print(f"[쿠팡이츠] 리뷰 페이지 URL: {self.reviews_url}")
                 await page.goto(self.reviews_url, wait_until="domcontentloaded", timeout=60000)
-                print("[쿠팡이츠] 리뷰 페이지 로드 완료")
+
+                # 이동 후 URL 확인
+                final_url = page.url
+                print(f"[쿠팡이츠] 이동 후 URL: {final_url}")
+
+                if "reviews" in final_url:
+                    print("[쿠팡이츠] 리뷰 페이지 로드 완료")
+                else:
+                    print(f"[쿠팡이츠] 예상과 다른 페이지로 이동됨: {final_url}")
+                    # 리뷰 페이지가 아니면 다시 시도
+                    await page.goto(self.reviews_url, wait_until="domcontentloaded", timeout=30000)
+                    print(f"[쿠팡이츠] 재시도 후 URL: {page.url}")
+
             except Exception as e:
                 print(f"[쿠팡이츠] 리뷰 페이지 로드 에러 (무시): {e}")
 
@@ -383,32 +396,22 @@ class CoupangEatsCrawler:
                             if modal_still_there:
                                 print("[쿠팡이츠] 페이지 이동 트릭으로 모달 닫기 시도...")
                                 try:
-                                    # 현재 URL 저장
-                                    current_url = page.url
-                                    print(f"[쿠팡이츠] 현재 URL: {current_url}")
-
-                                    # 잠깐 다른 페이지로 이동했다가 바로 돌아오기
-                                    # 쿠팡이츠 관리 페이지 내에서 안전한 페이지
-                                    temp_url = "https://store.coupangeats.com/merchant/management"
-
-                                    print(f"[쿠팡이츠] 임시 페이지로 이동: {temp_url}")
-                                    await page.goto(temp_url)
-                                    await page.wait_for_timeout(1000)
-
-                                    print(f"[쿠팡이츠] 원래 페이지로 복귀: {current_url}")
-                                    await page.goto(current_url)
+                                    # 리뷰 페이지로 강제 이동 (모달이 자동으로 닫힘)
+                                    print(f"[쿠팡이츠] 리뷰 페이지로 강제 이동: {self.reviews_url}")
+                                    await page.goto(self.reviews_url, wait_until="domcontentloaded", timeout=30000)
                                     await page.wait_for_timeout(2000)
 
-                                    print("[쿠팡이츠] 페이지 이동 트릭 완료 - 모달 확인...")
+                                    print("[쿠팡이츠] 페이지 이동 트릭 완료 - 모달이 자동으로 닫힘")
+                                    # 페이지 이동으로 모달이 닫혔으므로 더 이상 확인 불필요
 
                                 except Exception as nav_error:
                                     print(f"[쿠팡이츠] 페이지 이동 트릭 실패: {nav_error}")
-
-                            # 키보드 시도
-                            await page.keyboard.press("Enter")
-                            await page.wait_for_timeout(500)
-                            await page.keyboard.press("Space")
-                            await page.wait_for_timeout(500)
+                            else:
+                                # 빈 공간 클릭으로 성공한 경우만 키보드 시도
+                                await page.keyboard.press("Enter")
+                                await page.wait_for_timeout(500)
+                                await page.keyboard.press("Space")
+                                await page.wait_for_timeout(500)
 
                     # 4. 최종 확인
                     final_modal_exists = False
