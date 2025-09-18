@@ -254,183 +254,40 @@ class CoupangEatsCrawler:
             # 3. 리뷰 페이지로 이동
             print("[쿠팡이츠] 리뷰 페이지로 이동")
             try:
-                print(f"[쿠팡이츠] 리뷰 페이지 URL: {self.reviews_url}")
                 await page.goto(self.reviews_url, wait_until="domcontentloaded", timeout=60000)
-
-                # 이동 후 URL 확인
-                final_url = page.url
-                print(f"[쿠팡이츠] 이동 후 URL: {final_url}")
-
-                if "reviews" in final_url:
-                    print("[쿠팡이츠] 리뷰 페이지 로드 완료")
-                else:
-                    print(f"[쿠팡이츠] 예상과 다른 페이지로 이동됨: {final_url}")
-                    # 리뷰 페이지가 아니면 다시 시도
-                    await page.goto(self.reviews_url, wait_until="domcontentloaded", timeout=30000)
-                    print(f"[쿠팡이츠] 재시도 후 URL: {page.url}")
-
+                print("[쿠팡이츠] 리뷰 페이지 로드 완료")
             except Exception as e:
                 print(f"[쿠팡이츠] 리뷰 페이지 로드 에러 (무시): {e}")
 
             await page.wait_for_timeout(3000)
 
-            # 프로모션 모달 팝업 닫기 (있는 경우) - 강화된 버전
+            # 프로모션 모달 팝업 닫기 (있는 경우)
             try:
                 print("[쿠팡이츠] 프로모션 모달 확인 중...")
 
-                # 여러 모달 선택자들 시도
-                modal_selectors = [
-                    '.modal__contents',
-                    '.modal',
-                    '[role="dialog"]',
-                    '.dialog',
-                    '.popup',
-                    'div[class*="modal"]',
-                    'div[class*="dialog"]',
-                    'div[class*="popup"]'
-                ]
+                # 셀레니움에서 성공한 정확한 선택자 우선 시도
+                selenium_close_selector = "button.dialog-modal-wrapperbody--close-button.dialog-modal-wrapperbody--close-icon--black[data-testid='Dialog__CloseButton']"
 
-                modal_found = False
-                found_selector = None
-                for selector in modal_selectors:
-                    modal_element = await page.query_selector(selector)
-                    if modal_element:
-                        print(f"[쿠팡이츠] 모달 발견 (선택자: {selector})")
-                        modal_found = True
-                        found_selector = selector
-                        break
-
-                if modal_found:
-                    # 1. 먼저 ESC 키 여러 번 시도
-                    print("[쿠팡이츠] ESC 키로 모달 닫기 시도...")
-                    for i in range(3):
-                        await page.keyboard.press("Escape")
-                        await page.wait_for_timeout(800)
-
-                    # 2. 여전히 모달이 있다면 닫기 버튼 클릭 시도
-                    modal_still_exists = False
-                    for selector in modal_selectors:
-                        if await page.query_selector(selector):
-                            modal_still_exists = True
-                            break
-
-                    if modal_still_exists:
-                        print("[쿠팡이츠] ESC로 안닫힘 - 닫기 버튼 클릭 시도...")
-
-                        # 닫기 버튼 선택자들
-                        close_selectors = [
-                            'button[data-testid="Dialog__CloseButton"]',
-                            'button[aria-label*="닫기"]',
-                            'button[aria-label*="close"]',
-                            'button[aria-label*="Close"]',
-                            'button.close',
-                            '.close-button',
-                            'button[data-dismiss="modal"]',
-                            '.modal__header button',
-                            '.modal-header button',
-                            '.modal .close',
-                            '.dialog .close',
-                            'button[title*="닫기"]',
-                            'button[title*="close"]'
-                        ]
-
-                        close_clicked = False
-                        for close_selector in close_selectors:
-                            try:
-                                close_button = await page.query_selector(close_selector)
-                                if close_button:
-                                    print(f"[쿠팡이츠] 닫기 버튼 클릭: {close_selector}")
-                                    await close_button.click()
-                                    await page.wait_for_timeout(1500)
-                                    close_clicked = True
-                                    break
-                            except Exception as click_error:
-                                print(f"[쿠팡이츠] 버튼 클릭 실패: {click_error}")
-                                continue
-
-                        # 3. 여전히 안되면 모달 배경이나 빈 공간 클릭
-                        if not close_clicked:
-                            print("[쿠팡이츠] 닫기 버튼 없음 - 다양한 빈 공간 클릭 시도...")
-
-                            # 여러 빈 공간 위치 시도 (모달 외부)
-                            empty_click_positions = [
-                                (10, 10),      # 좌상단
-                                (50, 50),      # 좌상단2
-                                (10, 300),     # 좌중간
-                                (10, 500),     # 좌하단
-                                (1000, 10),    # 우상단
-                                (1000, 300),   # 우중간
-                                (500, 10),     # 상단 중앙
-                                (500, 600),    # 하단 중앙
-                                (200, 200),    # 중앙 좌측
-                                (800, 200)     # 중앙 우측
-                            ]
-
-                            for x, y in empty_click_positions:
-                                try:
-                                    print(f"[쿠팡이츠] 빈 공간 클릭 시도: ({x}, {y})")
-                                    await page.mouse.click(x, y)
-                                    await page.wait_for_timeout(800)
-
-                                    # 클릭 후 모달이 닫혔는지 확인
-                                    modal_check = False
-                                    for selector in modal_selectors:
-                                        if await page.query_selector(selector):
-                                            modal_check = True
-                                            break
-
-                                    if not modal_check:
-                                        print(f"[쿠팡이츠] 빈 공간 클릭으로 모달 닫기 성공: ({x}, {y})")
-                                        break
-                                except Exception as click_error:
-                                    print(f"[쿠팡이츠] 빈 공간 클릭 실패: {click_error}")
-                                    continue
-
-                            # 여전히 모달이 있다면 페이지 이동 트릭 시도
-                            modal_still_there = False
-                            for selector in modal_selectors:
-                                if await page.query_selector(selector):
-                                    modal_still_there = True
-                                    break
-
-                            if modal_still_there:
-                                print("[쿠팡이츠] 페이지 이동 트릭으로 모달 닫기 시도...")
-                                try:
-                                    # 리뷰 페이지로 강제 이동 (모달이 자동으로 닫힘)
-                                    print(f"[쿠팡이츠] 리뷰 페이지로 강제 이동: {self.reviews_url}")
-                                    await page.goto(self.reviews_url, wait_until="domcontentloaded", timeout=30000)
-                                    await page.wait_for_timeout(2000)
-
-                                    print("[쿠팡이츠] 페이지 이동 트릭 완료 - 모달이 자동으로 닫힘")
-                                    # 페이지 이동으로 모달이 닫혔으므로 더 이상 확인 불필요
-
-                                except Exception as nav_error:
-                                    print(f"[쿠팡이츠] 페이지 이동 트릭 실패: {nav_error}")
-                            else:
-                                # 빈 공간 클릭으로 성공한 경우만 키보드 시도
-                                await page.keyboard.press("Enter")
-                                await page.wait_for_timeout(500)
-                                await page.keyboard.press("Space")
-                                await page.wait_for_timeout(500)
-
-                    # 4. 최종 확인
-                    final_modal_exists = False
-                    for selector in modal_selectors:
-                        if await page.query_selector(selector):
-                            final_modal_exists = True
-                            break
-
-                    if not final_modal_exists:
-                        print("[쿠팡이츠] 모달 닫기 성공")
-                    else:
-                        print("[쿠팡이츠] 모달이 여전히 있음 - 강제로 계속 진행")
-                        # 마지막 시도로 Tab 키와 Enter
-                        await page.keyboard.press("Tab")
-                        await page.wait_for_timeout(300)
-                        await page.keyboard.press("Enter")
-                        await page.wait_for_timeout(500)
+                close_button = await page.query_selector(selenium_close_selector)
+                if close_button:
+                    print("[쿠팡이츠] 셀레니움 검증된 닫기 버튼 발견 - 클릭 시도")
+                    await close_button.click()
+                    await page.wait_for_timeout(1500)
+                    print("[쿠팡이츠] 셀레니움 검증된 닫기 버튼으로 모달 닫기 성공")
                 else:
-                    print("[쿠팡이츠] 프로모션 모달 없음")
+                    print("[쿠팡이츠] 셀레니움 검증된 버튼 없음 - 다른 방법 시도")
+
+                    # 기본 ESC 키 시도
+                    print("[쿠팡이츠] ESC 키로 모달 닫기 시도...")
+                    await page.keyboard.press("Escape")
+                    await page.wait_for_timeout(1000)
+
+                    # 빈 공간 클릭 시도
+                    print("[쿠팡이츠] 빈 공간 클릭 시도...")
+                    await page.mouse.click(10, 10)
+                    await page.wait_for_timeout(1000)
+
+                    print("[쿠팡이츠] 기본 모달 닫기 시도 완료")
 
             except Exception as e:
                 print(f"[쿠팡이츠] 모달 처리 중 오류 (무시): {e}")
