@@ -60,11 +60,11 @@ class CoupangEatsCrawler:
         
         # 프록시 비활성화, User-Agent만 설정
         self.current_proxy = None
-        print("[쿠팡이츠] 🌐 직접 연결 사용 (프록시 비활성화)")
-        
+        print("[쿠팡이츠] 직접 연결 사용 (프록시 비활성화)")
+
         if self.ua_rotator:
             self.current_user_agent = self.ua_rotator.get_smart_user_agent()
-            print(f"[쿠팡이츠] 🔄 User-Agent: {self.current_user_agent[:60]}...")
+            print(f"[쿠팡이츠] User-Agent: {self.current_user_agent[:60]}...")
         else:
             self.current_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         
@@ -409,7 +409,7 @@ class CoupangEatsCrawler:
     async def _enhanced_clipboard_login(self, page, username: str, password: str) -> bool:
         """coupang_review_crawler.py와 동일한 클립보드 로그인"""
         try:
-            print("[쿠팡이츠] 📋 클립보드 로그인 시작...")
+            print("[쿠팡이츠] 클립보드 로그인 시작...")
             
             # ID 입력 - pyperclip 사용 (coupang_review_crawler.py와 동일)
             if pyperclip:
@@ -469,7 +469,7 @@ class CoupangEatsCrawler:
                 print("[쿠팡이츠] pyperclip 없음 - JavaScript 직접 입력 방식 사용...")
                 await self._javascript_input_fallback(page, username, password)
             
-            print("[쿠팡이츠] ✅ 로그인 입력 완료")
+            print("[쿠팡이츠] 로그인 입력 완료")
             return True
             
         except Exception as e:
@@ -581,10 +581,10 @@ class CoupangEatsCrawler:
                 click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
                 
                 await page.mouse.click(click_x, click_y)
-                print(f"[쿠팡이츠] ✅ 랜덤 위치 클릭: ({click_x:.1f}, {click_y:.1f})")
+                print(f"[쿠팡이츠] 랜덤 위치 클릭: ({click_x:.1f}, {click_y:.1f})")
             else:
                 await button.click()
-                print("[쿠팡이츠] ✅ 일반 클릭 완료")
+                print("[쿠팡이츠] 일반 클릭 완료")
             
             return True
             
@@ -625,7 +625,7 @@ class CoupangEatsCrawler:
     async def _login_with_stealth_monitored(self, page, username: str, password: str) -> bool:
         """coupang_review_crawler.py와 동일한 로그인 로직"""
         try:
-            print("🕵️ 스텔스 모드 로그인 시작...")
+            print("스텔스 모드 로그인 시작...")
             
             # 로그인 페이지로 이동
             print("[Monitor] 로그인 페이지로 이동 중...")
@@ -640,7 +640,7 @@ class CoupangEatsCrawler:
             
             # 성공 지표 체크 (이미 로그인된 상태인지)
             if "/merchant/login" not in current_url:
-                print("✅ 이미 로그인된 상태")
+                print("이미 로그인된 상태")
                 return True
             
             # 로그인 필드 확인
@@ -658,7 +658,7 @@ class CoupangEatsCrawler:
             # 간단한 클립보드 로그인 (복잡한 마우스 이동 제거)
             if pyperclip:
                 try:
-                    print("[Monitor] 📋 클립보드 로그인 시작...")
+                    print("[Monitor] 클립보드 로그인 시작...")
                     
                     # ID 입력 - 랜덤 클릭 with 15% margin
                     print("[Monitor] ID 필드 랜덤 클릭...")
@@ -716,7 +716,7 @@ class CoupangEatsCrawler:
                 await self._javascript_input_fallback(page, username, password)
             
             # 간단한 마우스 이동 후 로그인 버튼 클릭
-            print("[Monitor] 🎯 로그인 버튼 클릭...")
+            print("[Monitor] 로그인 버튼 클릭...")
             await page.wait_for_timeout(500)  # 잠시 대기
             
             # 버튼 랜덤 클릭
@@ -728,12 +728,12 @@ class CoupangEatsCrawler:
                 click_y = box['y'] + margin_y + random.random() * (box['height'] - 2 * margin_y)
                 
                 await page.mouse.click(click_x, click_y)
-                print(f"[Monitor] ✅ 랜덤 위치 클릭: ({click_x:.1f}, {click_y:.1f})")
+                print(f"[Monitor] 랜덤 위치 클릭: ({click_x:.1f}, {click_y:.1f})")
             else:
                 await submit_button.click()
-                print("[Monitor] ✅ 일반 클릭 완료")
+                print("[Monitor] 일반 클릭 완료")
             
-            print("[Monitor] 🚀 로그인 버튼 클릭 완료 - 응답 대기 시작")
+            print("[Monitor] 로그인 버튼 클릭 완료 - 응답 대기 시작")
             
             # 1단계: 빠른 실패 감지 (3초 이내)
             print("[Monitor] 빠른 실패 감지 중 (3초)...")
