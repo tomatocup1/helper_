@@ -264,39 +264,24 @@ class CoupangEatsCrawler:
             # 프로모션 모달 팝업 닫기 (있는 경우)
             try:
                 print("[쿠팡이츠] 프로모션 모달 확인 중...")
-                # 여러 방법으로 모달 닫기 시도
 
-                # 방법 1: data-testid로 찾기
-                modal_close_button = await page.query_selector('button[data-testid="Dialog__CloseButton"]')
+                # 모달이 있는지 확인
+                modal_exists = await page.query_selector('.modal__contents')
+                if not modal_exists:
+                    modal_exists = await page.query_selector('button[data-testid="Dialog__CloseButton"]')
 
-                # 방법 2: 클래스명으로 찾기
-                if not modal_close_button:
-                    modal_close_button = await page.query_selector('button.dialog-modal-wrapper__body--close-button')
-
-                if modal_close_button:
-                    print("[쿠팡이츠] 프로모션 모달 발견 - 닫기 시도")
-                    # 클릭 가능할 때까지 대기
-                    await modal_close_button.wait_for_element_state("visible")
-                    await modal_close_button.wait_for_element_state("enabled")
-
-                    # 여러 방법으로 클릭 시도
-                    try:
-                        # 방법 1: 일반 클릭
-                        await modal_close_button.click()
-                        print("[쿠팡이츠] 모달 닫기 클릭 완료")
-                    except:
-                        # 방법 2: JavaScript로 클릭
-                        print("[쿠팡이츠] JavaScript로 모달 닫기 시도")
-                        await page.evaluate('(button) => button.click()', modal_close_button)
-
-                    await page.wait_for_timeout(2000)
+                if modal_exists:
+                    print("[쿠팡이츠] 프로모션 모달 발견 - ESC 키로 닫기")
+                    await page.keyboard.press("Escape")
+                    await page.wait_for_timeout(1500)
 
                     # 모달이 실제로 닫혔는지 확인
-                    modal_visible = await page.query_selector('.modal__contents')
-                    if not modal_visible:
+                    modal_still_visible = await page.query_selector('.modal__contents')
+                    if not modal_still_visible:
                         print("[쿠팡이츠] 프로모션 모달 닫기 성공")
                     else:
-                        print("[쿠팡이츠] 모달이 여전히 표시됨 - ESC 키로 닫기 시도")
+                        # 한 번 더 ESC 시도
+                        print("[쿠팡이츠] 모달이 여전히 표시됨 - ESC 키로 다시 시도")
                         await page.keyboard.press("Escape")
                         await page.wait_for_timeout(1000)
                 else:
