@@ -2391,14 +2391,34 @@ class CoupangReviewCrawler:
         try:
             logger.info("모달 창 탐지 및 닫기 시작...")
 
-            # 0. 셀레니움에서 검증된 프로모션 모달 닫기 버튼 (최우선)
+            # 0. 셀레니움의 WebDriverWait + execute_script 방식을 Playwright로 재현
             selenium_selector = "button.dialog-modal-wrapperbody--close-button.dialog-modal-wrapperbody--close-icon--black[data-testid='Dialog__CloseButton']"
-            selenium_close_button = await page.query_selector(selenium_selector)
-            if selenium_close_button:
-                await selenium_close_button.click()
-                logger.info("✅ 셀레니움 검증된 프로모션 모달 닫기 성공")
-                await page.wait_for_timeout(1000)
-                return True
+
+            try:
+                # WebDriverWait 역할 - 요소가 클릭 가능할 때까지 대기 (최대 10초)
+                logger.info("프로모션 모달 버튼 대기 중...")
+                await page.wait_for_selector(selenium_selector, timeout=10000, state='visible')
+
+                # 요소가 실제로 클릭 가능한지 확인
+                element = await page.query_selector(selenium_selector)
+                if element:
+                    is_visible = await element.is_visible()
+                    is_enabled = await element.is_enabled()
+
+                    if is_visible and is_enabled:
+                        logger.info("✅ 프로모션 모달 버튼 발견 - JavaScript 클릭 실행")
+
+                        # 셀레니움의 execute_script와 동일한 방식으로 JavaScript 클릭
+                        await page.evaluate('(element) => element.click()', element)
+
+                        logger.info("✅ 셀레니움 방식 프로모션 모달 닫기 성공")
+                        await page.wait_for_timeout(1000)
+                        return True
+                    else:
+                        logger.info("프로모션 모달 버튼이 보이지 않거나 비활성화됨")
+
+            except Exception as e:
+                logger.info(f"프로모션 모달 없음 또는 시간 초과: {e}")
 
             # 1. 매장 불러오기에서 사용하는 정확한 Speak Up 모달 닫기 버튼
             close_button = await page.query_selector('button.dialog-modal-wrapper__body--close-button')
