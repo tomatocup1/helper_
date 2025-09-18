@@ -1438,10 +1438,19 @@ class CoupangReplyPoster:
             logger.error(f"답글 상태 업데이트 실패: {e}")
 
     async def _close_modal_if_exists(self, page: Page):
-        """모달 창 닫기 (coupang_review_crawler.py와 동일한 로직)"""
+        """모달 창 닫기 (셀레니움 검증된 선택자 우선 + 기존 로직)"""
         try:
             logger.info("모달 창 탐지 및 닫기 시작...")
-            
+
+            # 0. 셀레니움에서 검증된 프로모션 모달 닫기 버튼 (최우선)
+            selenium_selector = "button.dialog-modal-wrapperbody--close-button.dialog-modal-wrapperbody--close-icon--black[data-testid='Dialog__CloseButton']"
+            selenium_close_button = await page.query_selector(selenium_selector)
+            if selenium_close_button:
+                await selenium_close_button.click()
+                logger.info("✅ 셀레니움 검증된 프로모션 모달 닫기 성공")
+                await page.wait_for_timeout(1000)
+                return True
+
             # 1. 매장 불러오기에서 사용하는 정확한 Speak Up 모달 닫기 버튼
             close_button = await page.query_selector('button.dialog-modal-wrapper__body--close-button')
             if close_button:
