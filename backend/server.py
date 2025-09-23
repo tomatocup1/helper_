@@ -32,11 +32,12 @@ class ReplySettings(BaseModel):
     replyTone: str = 'friendly'
     minReplyLength: int = 50
     maxReplyLength: int = 200
-    brandVoice: str = ""
-    greetingTemplate: str = ""
-    closingTemplate: str = ""
+    brandVoice: Optional[str] = ""
+    greetingTemplate: Optional[str] = ""
+    closingTemplate: Optional[str] = ""
     seoKeywords: List[str] = []
     autoApprovalDelayHours: int = 48
+    operationType: Optional[str] = "both"
 
 class StoreInfo(BaseModel):
     id: str
@@ -161,7 +162,8 @@ async def get_reply_settings(store_id: str):
                     "greetingTemplate": settings.get("greeting_template", ""),
                     "closingTemplate": settings.get("closing_template", ""),
                     "seoKeywords": settings.get("seo_keywords", []),
-                    "autoApprovalDelayHours": settings.get("auto_approval_delay_hours", 48)
+                    "autoApprovalDelayHours": settings.get("auto_approval_delay_hours", 48),
+                    "operationType": settings.get("operation_type", "both")
                 }
             }
         else:
