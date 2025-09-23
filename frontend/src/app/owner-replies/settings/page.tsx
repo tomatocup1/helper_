@@ -324,6 +324,16 @@ export default function ReplySettingsPage() {
     loadStores()
   }, [user])
 
+  // 설정 변경 디버깅
+  useEffect(() => {
+    console.log('[FRONTEND DEBUG] 설정 상태 변경:', settings)
+  }, [settings])
+
+  // 선택된 매장 변경 디버깅
+  useEffect(() => {
+    console.log('[FRONTEND DEBUG] 선택된 매장 변경:', selectedStore)
+  }, [selectedStore])
+
   if (loadingStores) {
     return (
       <AppLayout>
@@ -478,10 +488,12 @@ export default function ReplySettingsPage() {
                             </p>
                           </div>
                           <Switch
+                            key={`auto-reply-${selectedStore?.id}`}
                             checked={settings.autoReplyEnabled}
-                            onCheckedChange={(checked) => 
+                            onCheckedChange={(checked) => {
+                              console.log('[FRONTEND DEBUG] Switch 변경:', checked)
                               setSettings(prev => ({ ...prev, autoReplyEnabled: checked }))
-                            }
+                            }}
                           />
                         </div>
 
@@ -489,10 +501,12 @@ export default function ReplySettingsPage() {
                           <div className="space-y-2">
                             <Label>답글 톤앤매너</Label>
                             <Select
+                              key={`reply-tone-${selectedStore?.id}`}
                               value={settings.replyTone}
-                              onValueChange={(value: any) => 
+                              onValueChange={(value: any) => {
+                                console.log('[FRONTEND DEBUG] 톤앤매너 변경:', value)
                                 setSettings(prev => ({ ...prev, replyTone: value }))
-                              }
+                              }}
                             >
                               <SelectTrigger>
                                 <SelectValue />
