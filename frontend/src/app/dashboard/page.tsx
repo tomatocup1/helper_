@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/store/auth-store-supabase'
 import AppLayout from '@/components/layout/AppLayout'
 import {
@@ -50,11 +51,20 @@ interface DashboardData {
   }>
 }
 
+interface Store {
+  id: string
+  store_name: string
+  platform: string
+  auto_reply_enabled: boolean
+}
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [stores, setStores] = useState<Store[]>([])
+  const [selectedStore, setSelectedStore] = useState<string>('all')
   
   // 개발 모드용 임시 사용자 데이터
   const displayUser = user || {
@@ -62,21 +72,179 @@ export default function DashboardPage() {
     subscription_plan: 'free'
   }
 
+  // 매장 목록 가져오기
+  const fetchStores = async () => {
+    try {
+      const backendUrl = 'https://helper-backend-4ilp.onrender.com'
+      const testUserId = 'a7654c42-10ed-435f-97d8-d2c2dfeccbcb' // 실제 사용자 ID
+      const userId = user?.id || testUserId
+      const safeUserId = (userId && userId.trim() !== '') ? userId : testUserId
+
+      console.log('[DEBUG] Fetching stores for user:', safeUserId)
+      const response = await fetch(`${backendUrl}/api/user-stores/${safeUserId}`)
+      const result = await response.json()
+
+      if (result.success && result.stores) {
+        setStores(result.stores)
+      }
+    } catch (err) {
+      console.error('Failed to fetch stores:', err)
+    }
+  }
+
   // 대시보드 데이터 가져오기
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
       setError(null)
-      
+
       // Vercel 환경변수가 적용되지 않아 직접 하드코딩
       const backendUrl = 'https://helper-backend-4ilp.onrender.com'
-      const response = await fetch(`${backendUrl}/api/dashboard/stats/${user?.id || ''}`)
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+
+      console.log('[DEBUG] Current user object:', user)
+      console.log('[DEBUG] user?.id:', user?.id)
+
+      // 실제 사용자 ID 또는 테스트용 UUID 사용 - 임시로 강제 테스트 ID 사용
+      const testUserId = 'a7654c42-10ed-435f-97d8-d2c2dfeccbcb' // 실제 사용자 ID
+      const userId = user?.id || testUserId
+
+      console.log('[DEBUG] Initial userId:', userId)
+
+      // userId가 여전히 빈 문자열이거나 null인 경우 기본값 사용
+      const safeUserId = (userId && userId.trim() !== '') ? userId : testUserId
+
+      console.log('[DEBUG] Safe userId:', safeUserId)
+      console.log('[DEBUG] Selected store:', selectedStore)
+
+      // 기존 API들을 조합해서 대시보드 데이터 생성
+      console.log('[DEBUG] Building dashboard from existing APIs')
+
+      // 1. 매장 목록 가져오기
+      const storesResponse = await fetch(`${backendUrl}/api/user-stores/${safeUserId}`)
+      const storesResult = await storesResponse.json()
+
+      if (!storesResult.success) {
+        throw new Error('Failed to fetch stores')
       }
-      
-      const result = await response.json()
+
+      const allStores = storesResult.stores || []
+      console.log('[DEBUG] Found stores:', allStores.length)
+
+      // 2. 리뷰 데이터 가져오기
+      const reviewsResponse = await fetch(`${backendUrl}/api/v1/reviews?user_id=${safeUserId}&limit=100`)
+      const reviewsResult = await reviewsResponse.json()
+
+      const allReviews = reviewsResult.success ? reviewsResult.reviews || [] : []
+      console.log('[DEBUG] Found reviews:', allReviews.length)
+
+      // 3. 대시보드 데이터 계산
+      const today = new Date().toISOString().split('T')[0]
+
+      let filteredStores = allStores
+      let filteredReviews = allReviews
+
+      // 선택된 매장이 있으면 필터링
+      if (selectedStore !== 'all') {
+        filteredStores = allStores.filter(store => store.id === selectedStore)
+        filteredReviews = allReviews.filter(review => review.platform_store_id === selectedStore)
+      }
+
+      // 통계 계산
+      const totalStores = filteredStores.length
+      const activeStores = filteredStores.filter(store => store.auto_reply_enabled).length
+      const totalReviews = filteredReviews.length
+
+      // 평점 계산 (네이버 제외)
+      const ratingsReviews = filteredReviews.filter(review => review.rating && review.rating > 0)
+      const averageRating = ratingsReviews.length > 0
+        ? Math.round((ratingsReviews.reduce((sum, review) => sum + review.rating, 0) / ratingsReviews.length) * 10) / 10
+        : 0
+
+      // 답글 관련 계산
+      const pendingReplies = filteredReviews.filter(review => !review.owner_reply && !review.reply_text).length
+      const replyRate = totalReviews > 0 ? Math.round(((totalReviews - pendingReplies) / totalReviews) * 100) : 0
+
+      // 오늘 새 리뷰
+      const newReviewsToday = filteredReviews.filter(review =>
+        review.created_at && review.created_at.startsWith(today)
+      ).length
+
+      // 최근 리뷰 (최대 10개)
+      const recentReviews = filteredReviews
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 10)
+        .map(review => ({
+          id: review.id,
+          platform: review.platform,
+          store_name: filteredStores.find(s => s.id === review.platform_store_id)?.store_name || '알 수 없는 매장',
+          reviewer_name: review.reviewer_name || '익명',
+          rating: review.rating || 0,
+          review_text: (review.review_text || '').slice(0, 100) + ((review.review_text || '').length > 100 ? '...' : ''),
+          sentiment: review.rating >= 4 ? 'positive' : review.rating <= 2 ? 'negative' : 'neutral',
+          reply_status: (review.owner_reply || review.reply_text) ? 'replied' : 'pending',
+          review_date: review.created_at
+        }))
+
+      // 알림 생성
+      const alerts = []
+      if (totalStores === 0) {
+        alerts.push({
+          type: 'info',
+          message: '등록된 매장이 없습니다. 첫 번째 매장을 등록해보세요!',
+          action: '매장 등록하기'
+        })
+      } else {
+        if (pendingReplies > 5) {
+          alerts.push({
+            type: 'warning',
+            message: `${pendingReplies}개의 답글 대기 중인 리뷰가 있습니다.`,
+            action: '답글 작성하기'
+          })
+        }
+
+        if (averageRating > 0 && averageRating < 3.0) {
+          alerts.push({
+            type: 'alert',
+            message: `평균 평점이 ${averageRating}점으로 낮습니다.`,
+            action: '리뷰 관리하기'
+          })
+        }
+
+        if (newReviewsToday > 0) {
+          alerts.push({
+            type: 'info',
+            message: `오늘 새로운 리뷰 ${newReviewsToday}개가 등록되었습니다.`,
+            action: '리뷰 확인하기'
+          })
+        }
+      }
+
+      // 응답 데이터 구성
+      const dashboardData = {
+        overview: {
+          total_stores: totalStores,
+          active_stores: activeStores,
+          total_reviews: totalReviews,
+          average_rating: averageRating,
+          reply_rate: replyRate,
+          new_reviews_today: newReviewsToday,
+          pending_replies: pendingReplies,
+          ...(selectedStore !== 'all' && filteredStores.length > 0 && {
+            store_info: {
+              name: filteredStores[0].store_name,
+              platform: filteredStores[0].platform,
+              auto_reply_enabled: filteredStores[0].auto_reply_enabled
+            }
+          })
+        },
+        recent_reviews: recentReviews,
+        alerts: alerts
+      }
+
+      console.log('[DEBUG] Generated dashboard data:', dashboardData)
+
+      // 성공 응답처럼 처리
+      const result = { success: true, data: dashboardData }
       
       if (result.success && result.data) {
         setData(result.data)
@@ -111,12 +279,16 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    fetchStores()
+  }, [])
+
+  useEffect(() => {
     fetchDashboardData()
-    
+
     // 30초마다 데이터 새로고침
     const interval = setInterval(fetchDashboardData, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [selectedStore])
 
   // 로딩 상태
   if (loading) {
@@ -160,6 +332,7 @@ export default function DashboardPage() {
     switch (sentiment) {
       case 'positive': return 'text-green-600 bg-green-50'
       case 'negative': return 'text-red-600 bg-red-50'
+      case 'neutral': return 'text-blue-600 bg-blue-50'
       default: return 'text-gray-600 bg-gray-50'
     }
   }
@@ -184,17 +357,36 @@ export default function DashboardPage() {
             안녕하세요, <span className="font-medium">{displayUser?.name}</span>님! 오늘도 가게 운영을 스마트하게 관리해보세요.
           </p>
         </div>
-        <div className="flex space-x-3">
-          <Button variant="outline" onClick={fetchDashboardData} disabled={loading}>
-            <BarChart3 className="w-4 h-4 mr-2" />
-            {loading ? '새로고침 중...' : '새로고침'}
-          </Button>
-          <Button variant="brand" asChild>
-            <Link href="/stores/add">
-              <Plus className="w-4 h-4 mr-2" />
-              매장 추가
-            </Link>
-          </Button>
+        <div className="flex flex-col space-y-3 md:flex-row md:space-y-0 md:space-x-3">
+          {/* 매장 선택 드롭다운 */}
+          {stores.length > 0 && (
+            <Select value={selectedStore} onValueChange={setSelectedStore}>
+              <SelectTrigger className="w-full md:w-[200px]">
+                <SelectValue placeholder="매장 선택" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 매장</SelectItem>
+                {stores.map((store) => (
+                  <SelectItem key={store.id} value={store.id}>
+                    {store.store_name} ({store.platform.toUpperCase()})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <div className="flex space-x-3">
+            <Button variant="outline" onClick={fetchDashboardData} disabled={loading}>
+              <BarChart3 className="w-4 h-4 mr-2" />
+              {loading ? '새로고침 중...' : '새로고침'}
+            </Button>
+            <Button variant="brand" asChild>
+              <Link href="/stores/add">
+                <Plus className="w-4 h-4 mr-2" />
+                매장 추가
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -208,7 +400,12 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{data.overview.total_stores}</div>
             <p className="text-xs text-muted-foreground">
-              활성 매장 운영 중
+              {selectedStore === 'all'
+                ? `활성 매장 ${data.overview.active_stores}개 운영 중`
+                : data.overview.store_info
+                  ? `${data.overview.store_info.platform.toUpperCase()} - ${data.overview.store_info.auto_reply_enabled ? '자동답글 ON' : '자동답글 OFF'}`
+                  : '매장 정보'
+              }
             </p>
           </CardContent>
         </Card>
@@ -305,8 +502,9 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center space-x-2 ml-4">
                           <span className={`text-xs px-2 py-1 rounded-full ${getSentimentColor(review.sentiment)}`}>
-                            {review.sentiment === 'positive' ? '긍정' : 
-                             review.sentiment === 'negative' ? '부정' : '중립'}
+                            {review.sentiment === 'positive' ? '긍정' :
+                             review.sentiment === 'negative' ? '부정' :
+                             review.sentiment === 'neutral' ? '중립' : '미분류'}
                           </span>
                           {getReplyStatusIcon(review.reply_status)}
                         </div>
@@ -314,9 +512,9 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between text-xs text-gray-500">
                         <span>{formatTime(review.review_date)}</span>
                         <span>
-                          {review.reply_status === 'sent' || review.reply_status === 'replied' ? '답글 완료' :
-                           review.reply_status === 'approved' ? 'AI 답글 승인됨' :
-                           review.reply_status === 'pending_approval' ? '답글 승인 대기' :
+                          {review.reply_status === 'replied' ? '답글 완료' :
+                           review.reply_status === 'generated' ? 'AI 답글 생성됨' :
+                           review.reply_status === 'pending' ? '답글 대기 중' :
                            '답글 대기 중'}
                         </span>
                       </div>
