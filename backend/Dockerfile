@@ -17,6 +17,27 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     wget \
     curl \
+    # Playwright 브라우저 실행에 필요한 추가 의존성
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libatspi2.0-0 \
+    libx11-6 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libxcb1 \
+    libxkbcommon0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 3.11을 기본 python3로 설정
@@ -33,8 +54,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Playwright 환경 변수 먼저 설정
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 # Playwright 브라우저 및 의존성 설치
-RUN playwright install --with-deps chromium
+RUN python3 -m playwright install chromium
+RUN python3 -m playwright install-deps chromium
 
 # 앱 코드 복사
 COPY . .
@@ -43,7 +68,6 @@ COPY . .
 ENV PYTHONPATH=/app
 ENV PYTHONIOENCODING=utf-8
 ENV PYTHONUTF8=1
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # 포트 설정
 EXPOSE 8001
