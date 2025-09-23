@@ -80,9 +80,9 @@ async def api_status():
 # 스토어 관련 엔드포인트
 @app.get("/api/stores")
 async def get_stores():
-    """모든 스토어 목록 조회"""
+    """모든 플랫폼 스토어 목록 조회"""
     try:
-        response = supabase.table('stores').select("*").execute()
+        response = supabase.table('platform_stores').select("*").execute()
         return {"success": True, "stores": response.data}
     except Exception as e:
         print(f"Error fetching stores: {e}")
@@ -92,8 +92,8 @@ async def get_stores():
 async def get_user_stores(user_id: str):
     """특정 사용자의 스토어 목록 조회"""
     try:
-        # stores 테이블에서 user_id로 조회
-        response = supabase.table('stores').select("*").eq('user_id', user_id).execute()
+        # platform_stores 테이블에서 user_id로 조회
+        response = supabase.table('platform_stores').select("*").eq('user_id', user_id).execute()
         return {"success": True, "stores": response.data}
     except Exception as e:
         print(f"Error fetching user stores: {e}")
@@ -101,13 +101,23 @@ async def get_user_stores(user_id: str):
 
 @app.post("/api/stores")
 async def create_store(store_data: dict):
-    """새 스토어 생성"""
+    """새 플랫폼 스토어 생성"""
     try:
-        response = supabase.table('stores').insert(store_data).execute()
+        response = supabase.table('platform_stores').insert(store_data).execute()
         return {"success": True, "store": response.data[0] if response.data else None}
     except Exception as e:
         print(f"Error creating store: {e}")
         return {"success": False, "error": str(e)}
+
+@app.get("/api/platform-stores/{platform}")
+async def get_platform_stores(platform: str):
+    """특정 플랫폼의 스토어 목록 조회"""
+    try:
+        response = supabase.table('platform_stores').select("*").eq('platform', platform).execute()
+        return {"success": True, "stores": response.data}
+    except Exception as e:
+        print(f"Error fetching {platform} stores: {e}")
+        return {"success": False, "stores": [], "error": str(e)}
 
 # 크롤러 관련 엔드포인트
 @app.post("/crawler/start")
