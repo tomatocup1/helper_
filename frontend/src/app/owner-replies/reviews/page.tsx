@@ -119,7 +119,8 @@ export default function ReviewsPage() {
 
     try {
       // 백엔드 API 호출하여 모든 플랫폼의 리뷰 가져오기
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
+      // Vercel 환경변수가 적용되지 않아 직접 하드코딩
+      const backendUrl = 'https://helper-backend-4ilp.onrender.com'
       let apiUrl = `${backendUrl}/api/v1/reviews?limit=500&user_id=${user.id}`
       
       // 매장 필터 적용

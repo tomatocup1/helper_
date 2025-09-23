@@ -68,8 +68,9 @@ export default function DashboardPage() {
       setLoading(true)
       setError(null)
       
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
-      const response = await fetch(`${backendUrl}/api/v1/dashboard/stats`)
+      // Vercel 환경변수가 적용되지 않아 직접 하드코딩
+      const backendUrl = 'https://helper-backend-4ilp.onrender.com'
+      const response = await fetch(`${backendUrl}/api/dashboard/stats/${user?.id || ''}`)
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

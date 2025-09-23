@@ -85,7 +85,8 @@ export default function ReplySettingsPage() {
     
     setLoadingStores(true)
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
+      // Vercel 환경변수가 적용되지 않아 직접 하드코딩
+      const backendUrl = 'https://helper-backend-4ilp.onrender.com'
       const response = await fetch(`${backendUrl}/api/user-stores/${user.id}`)
       const data = await response.json()
       
@@ -109,7 +110,8 @@ export default function ReplySettingsPage() {
     setLoading(true)
     
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
+      // Vercel 환경변수가 적용되지 않아 직접 하드코딩
+      const backendUrl = 'https://helper-backend-4ilp.onrender.com'
       const response = await fetch(`${backendUrl}/api/reply-settings/${store.id}`)
       const data = await response.json()
       
@@ -154,7 +156,8 @@ export default function ReplySettingsPage() {
     
     setSaving(true)
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
+      // Vercel 환경변수가 적용되지 않아 직접 하드코딩
+      const backendUrl = 'https://helper-backend-4ilp.onrender.com'
       const requestUrl = `${backendUrl}/api/reply-settings/${selectedStore.id}`
       console.log('[FRONTEND DEBUG] 요청 URL:', requestUrl)
       
