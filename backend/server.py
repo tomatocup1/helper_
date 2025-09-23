@@ -583,54 +583,85 @@ async def get_store_dashboard_stats(user_id: str, store_id: str):
 @app.post("/api/v1/platform/connect")
 async def connect_platform(request_data: dict):
     """플랫폼 연결 엔드포인트"""
-    import asyncio
-    from datetime import datetime
-    
-    platform = request_data.get('platform')
-    credentials = request_data.get('credentials', {})
-    
-    print(f"[API] {platform} 연결 요청 받음: {credentials.get('username', 'N/A')}")
-    
-    if platform == 'coupangeats':
-        from services.coupangeats.simple_crawler import CoupangEatsCrawler
-        
-        async with CoupangEatsCrawler() as crawler:
-            success, stores, message = await crawler.crawl_stores(
-                credentials.get('username', ''),
-                credentials.get('password', '')
-            )
-            
+    try:
+        import asyncio
+        from datetime import datetime
+
+        platform = request_data.get('platform')
+        credentials = request_data.get('credentials', {})
+
+        print(f"[API] {platform} 연결 요청 받음: {credentials.get('username', 'N/A')}")
+
+        if platform == 'coupangeats':
+            try:
+                from services.coupangeats.simple_crawler import CoupangEatsCrawler
+
+                async with CoupangEatsCrawler() as crawler:
+                    success, stores, message = await crawler.crawl_stores(
+                        credentials.get('username', ''),
+                        credentials.get('password', '')
+                    )
+
+                    return {
+                        "success": success,
+                        "message": message,
+                        "stores": stores,
+                        "platform": platform,
+                        "timestamp": datetime.now().isoformat()
+                    }
+            except Exception as e:
+                print(f"[ERROR] CoupangEats crawler error: {e}")
+                return {
+                    "success": False,
+                    "message": f"CoupangEats 크롤러 오류: {str(e)}",
+                    "stores": [],
+                    "platform": platform,
+                    "timestamp": datetime.now().isoformat()
+                }
+
+        elif platform == 'yogiyo':
+            try:
+                from services.yogiyo.simple_crawler import YogiyoCrawler
+
+                async with YogiyoCrawler() as crawler:
+                    success, stores, message = await crawler.crawl_stores(
+                        credentials.get('username', ''),
+                        credentials.get('password', '')
+                    )
+
+                    return {
+                        "success": success,
+                        "message": message,
+                        "stores": stores,
+                        "platform": platform,
+                        "timestamp": datetime.now().isoformat()
+                    }
+            except Exception as e:
+                print(f"[ERROR] Yogiyo crawler error: {e}")
+                return {
+                    "success": False,
+                    "message": f"Yogiyo 크롤러 오류: {str(e)}",
+                    "stores": [],
+                    "platform": platform,
+                    "timestamp": datetime.now().isoformat()
+                }
+
+        else:
             return {
-                "success": success,
-                "message": message,
-                "stores": stores,
+                "success": False,
+                "message": f"지원하지 않는 플랫폼: {platform}",
+                "stores": [],
                 "platform": platform,
                 "timestamp": datetime.now().isoformat()
             }
-            
-    elif platform == 'yogiyo':
-        from services.yogiyo.simple_crawler import YogiyoCrawler
-        
-        async with YogiyoCrawler() as crawler:
-            success, stores, message = await crawler.crawl_stores(
-                credentials.get('username', ''),
-                credentials.get('password', '')
-            )
-            
-            return {
-                "success": success,
-                "message": message,
-                "stores": stores,
-                "platform": platform,
-                "timestamp": datetime.now().isoformat()
-            }
-            
-    else:
+
+    except Exception as e:
+        print(f"[ERROR] Platform connect general error: {e}")
         return {
             "success": False,
-            "message": f"지원하지 않는 플랫폼: {platform}",
+            "message": f"서버 오류: {str(e)}",
             "stores": [],
-            "platform": platform,
+            "platform": request_data.get('platform', 'unknown'),
             "timestamp": datetime.now().isoformat()
         }
 
