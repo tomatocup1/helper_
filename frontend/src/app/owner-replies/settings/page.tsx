@@ -112,7 +112,7 @@ export default function ReplySettingsPage() {
     try {
       // Vercel 환경변수가 적용되지 않아 직접 하드코딩
       const backendUrl = 'https://helper-backend-4ilp.onrender.com'
-      const response = await fetch(`${backendUrl}/api/reply-settings/${store.id}`)
+      const response = await fetch(`${backendUrl}/api/reply-settings/${user?.id}`)
       const data = await response.json()
       
       if (data.success && data.settings) {
@@ -158,7 +158,7 @@ export default function ReplySettingsPage() {
     try {
       // Vercel 환경변수가 적용되지 않아 직접 하드코딩
       const backendUrl = 'https://helper-backend-4ilp.onrender.com'
-      const requestUrl = `${backendUrl}/api/reply-settings/${selectedStore.id}`
+      const requestUrl = `${backendUrl}/api/reply-settings/${user?.id}`
       console.log('[FRONTEND DEBUG] 요청 URL:', requestUrl)
       
       const response = await fetch(requestUrl, {
