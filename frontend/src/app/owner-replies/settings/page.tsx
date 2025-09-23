@@ -211,17 +211,36 @@ export default function ReplySettingsPage() {
 
         // 현재 selectedStore 객체를 최신 값으로 업데이트
         if (data.updated_store) {
+          console.log('[FRONTEND DEBUG] 서버에서 받은 updated_store:', data.updated_store)
+          console.log('[FRONTEND DEBUG] updated_store의 auto_reply_enabled:', data.updated_store.auto_reply_enabled)
+          console.log('[FRONTEND DEBUG] updated_store의 operation_type:', data.updated_store.operation_type)
+
           const transformedStore = {
             ...data.updated_store,
             autoReplyEnabled: data.updated_store.auto_reply_enabled || false,
             operationType: data.updated_store.operation_type || 'both'
           }
+
+          console.log('[FRONTEND DEBUG] 변환된 transformedStore:', transformedStore)
+          console.log('[FRONTEND DEBUG] 변환된 autoReplyEnabled:', transformedStore.autoReplyEnabled)
+          console.log('[FRONTEND DEBUG] 변환된 operationType:', transformedStore.operationType)
+
           setSelectedStore(transformedStore)
 
           // stores 배열에서도 해당 매장 업데이트
-          setStores(prev => prev.map(store =>
-            store.id === selectedStore.id ? transformedStore : store
-          ))
+          setStores(prev => {
+            const updatedStores = prev.map(store => {
+              if (store.id === selectedStore.id) {
+                console.log('[FRONTEND DEBUG] stores 배열에서 매장 업데이트:', store.id, '→', transformedStore)
+                return transformedStore
+              }
+              return store
+            })
+            console.log('[FRONTEND DEBUG] 업데이트된 stores 배열:', updatedStores)
+            return updatedStores
+          })
+        } else {
+          console.log('[FRONTEND DEBUG] 서버 응답에 updated_store가 없음')
         }
 
         console.log('[FRONTEND DEBUG] ===== 설정 저장 완료 =====')
@@ -437,12 +456,16 @@ export default function ReplySettingsPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="space-y-1">
-                  {stores.map((store) => (
+                  {stores.map((store) => {
+                    console.log('[FRONTEND DEBUG] 매장 렌더링:', store.store_name, 'autoReplyEnabled:', store.autoReplyEnabled, 'operationType:', store.operationType)
+                    console.log('[FRONTEND DEBUG] store 전체 객체:', store)
+
+                    return (
                     <div
                       key={store.id}
                       className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors border-l-4 ${
-                        selectedStore?.id === store.id 
-                          ? 'bg-blue-50 border-l-blue-500' 
+                        selectedStore?.id === store.id
+                          ? 'bg-blue-50 border-l-blue-500'
                           : 'border-l-transparent'
                       }`}
                       onClick={() => selectStore(store)}
@@ -456,18 +479,19 @@ export default function ReplySettingsPage() {
                       </p>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-gray-500">운영 방식</span>
-                        {getOperationTypeBadge((store as any).operation_type || 'both')}
+                        {getOperationTypeBadge(store.operationType || (store as any).operation_type || 'both')}
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-500">
                           AI 답글
                         </span>
-                        <Badge variant={(store as any).auto_reply_enabled ? "default" : "secondary"}>
-                          {(store as any).auto_reply_enabled ? "ON" : "OFF"}
+                        <Badge variant={(store.autoReplyEnabled || (store as any).auto_reply_enabled) ? "default" : "secondary"}>
+                          {(store.autoReplyEnabled || (store as any).auto_reply_enabled) ? "ON" : "OFF"}
                         </Badge>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
