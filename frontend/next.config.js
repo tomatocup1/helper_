@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+// Force Vercel deployment trigger - v1.0.1
 const nextConfig = {
   // 환경변수 설정
   env: {
