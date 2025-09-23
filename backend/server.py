@@ -220,6 +220,116 @@ async def update_reply_settings(user_id: str, settings: ReplySettings):
         print(f"Error updating reply settings: {e}")
         return {"success": False, "error": str(e)}
 
+# 리뷰 관련 엔드포인트
+@app.get("/api/v1/reviews")
+async def get_reviews(limit: int = 500, user_id: str = None, platform: str = None):
+    """리뷰 목록 조회"""
+    try:
+        all_reviews = []
+
+        # 각 플랫폼 테이블에서 리뷰 조회
+        platforms = ['naver', 'baemin', 'coupangeats', 'yogiyo']
+
+        for plat in platforms:
+            if platform and platform != plat:
+                continue
+
+            table_name = f'reviews_{plat}'
+
+            if user_id:
+                # 먼저 해당 사용자의 platform_stores 조회
+                stores_response = supabase.table('platform_stores').select('id').eq('user_id', user_id).eq('platform', plat).execute()
+
+                if stores_response.data:
+                    store_ids = [store['id'] for store in stores_response.data]
+
+                    # 각 스토어의 리뷰 조회
+                    for store_id in store_ids:
+                        reviews_response = supabase.table(table_name).select('*').eq('platform_store_id', store_id).limit(limit).execute()
+
+                        if reviews_response.data:
+                            for review in reviews_response.data:
+                                review['platform'] = plat
+                                all_reviews.append(review)
+            else:
+                # 전체 리뷰 조회
+                reviews_response = supabase.table(table_name).select('*').limit(limit).execute()
+
+                if reviews_response.data:
+                    for review in reviews_response.data:
+                        review['platform'] = plat
+                        all_reviews.append(review)
+
+        # 날짜순 정렬
+        all_reviews.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+
+        return {
+            "success": True,
+            "reviews": all_reviews[:limit],
+            "total": len(all_reviews)
+        }
+    except Exception as e:
+        print(f"Error fetching reviews: {e}")
+        return {"success": False, "reviews": [], "error": str(e)}
+
+@app.get("/api/dashboard/stats/{user_id}")
+async def get_dashboard_stats(user_id: str):
+    """대시보드 통계 조회"""
+    try:
+        # 사용자의 스토어 조회
+        stores_response = supabase.table('platform_stores').select('*').eq('user_id', user_id).execute()
+        stores = stores_response.data or []
+
+        # 각 플랫폼별 리뷰 수 계산
+        total_reviews = 0
+        pending_replies = 0
+        avg_rating = 0
+        ratings_sum = 0
+        ratings_count = 0
+
+        for store in stores:
+            platform = store['platform']
+            store_id = store['id']
+            table_name = f'reviews_{platform}'
+
+            # 리뷰 조회
+            reviews_response = supabase.table(table_name).select('*').eq('platform_store_id', store_id).execute()
+
+            if reviews_response.data:
+                total_reviews += len(reviews_response.data)
+
+                for review in reviews_response.data:
+                    # 답글 대기 중인 리뷰 계산
+                    if not review.get('owner_reply'):
+                        pending_replies += 1
+
+                    # 평점 계산 (네이버는 평점이 없을 수 있음)
+                    if review.get('rating'):
+                        ratings_sum += review['rating']
+                        ratings_count += 1
+
+        # 평균 평점 계산
+        if ratings_count > 0:
+            avg_rating = round(ratings_sum / ratings_count, 1)
+
+        return {
+            "success": True,
+            "stats": {
+                "totalStores": len(stores),
+                "totalReviews": total_reviews,
+                "pendingReplies": pending_replies,
+                "avgRating": avg_rating,
+                "recentActivity": {
+                    "today": 0,  # TODO: 실제 계산 필요
+                    "week": 0,
+                    "month": total_reviews
+                }
+            }
+        }
+    except Exception as e:
+        print(f"Error fetching dashboard stats: {e}")
+        return {"success": False, "stats": None, "error": str(e)}
+
 # 플랫폼 연결 엔드포인트
 @app.post("/api/v1/platform/connect")
 async def connect_platform(request_data: dict):
