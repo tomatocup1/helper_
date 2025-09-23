@@ -272,13 +272,25 @@ async def get_reviews(limit: int = 500, user_id: str = None, platform: str = Non
         print(f"Error fetching reviews: {e}")
         return {"success": False, "reviews": [], "error": str(e)}
 
+@app.get("/api/dashboard/stats/")
+async def get_dashboard_stats_default():
+    """기본 테스트 대시보드 (user_id 없는 경우)"""
+    # 테스트용 기본 사용자 ID로 리다이렉트
+    return await get_dashboard_stats("10447e32-328a-4f83-94b4-bb824ced5c75")
+
 @app.get("/api/dashboard/stats/{user_id}")
 async def get_dashboard_stats(user_id: str):
     """대시보드 통계 조회"""
     try:
+        from datetime import datetime, timedelta
+
         # 사용자의 스토어 조회
         stores_response = supabase.table('platform_stores').select('*').eq('user_id', user_id).execute()
         stores = stores_response.data or []
+
+        print(f"[DEBUG] Found {len(stores)} stores for user {user_id}")
+        if len(stores) == 0:
+            print(f"[DEBUG] No stores found for user {user_id}, returning empty dashboard")
 
         # 각 플랫폼별 리뷰 수 계산
         total_reviews = 0
@@ -286,49 +298,279 @@ async def get_dashboard_stats(user_id: str):
         avg_rating = 0
         ratings_sum = 0
         ratings_count = 0
+        new_reviews_today = 0
+        recent_reviews = []
+        active_stores = 0
+
+        # 오늘 날짜 계산 (한국 시간 기준)
+        today = datetime.now().date()
+        week_ago = today - timedelta(days=7)
 
         for store in stores:
             platform = store['platform']
             store_id = store['id']
+            store_name = store.get('store_name', '알 수 없는 매장')
             table_name = f'reviews_{platform}'
 
-            # 리뷰 조회
-            reviews_response = supabase.table(table_name).select('*').eq('platform_store_id', store_id).execute()
+            # 자동 답글이 활성화된 스토어 카운트
+            if store.get('auto_reply_enabled', False):
+                active_stores += 1
 
-            if reviews_response.data:
-                total_reviews += len(reviews_response.data)
+            try:
+                # 리뷰 조회 (최근 리뷰 포함)
+                reviews_response = supabase.table(table_name).select('*').eq('platform_store_id', store_id).order('created_at', desc=True).limit(50).execute()
 
-                for review in reviews_response.data:
-                    # 답글 대기 중인 리뷰 계산
-                    if not review.get('owner_reply'):
-                        pending_replies += 1
+                if reviews_response.data:
+                    total_reviews += len(reviews_response.data)
 
-                    # 평점 계산 (네이버는 평점이 없을 수 있음)
-                    if review.get('rating'):
-                        ratings_sum += review['rating']
-                        ratings_count += 1
+                    for review in reviews_response.data:
+                        # 답글 대기 중인 리뷰 계산
+                        has_reply = review.get('owner_reply') or review.get('reply_text')
+                        if not has_reply:
+                            pending_replies += 1
+
+                        # 평점 계산 (네이버는 평점이 없을 수 있음)
+                        rating = review.get('rating', 0)
+                        if rating and rating > 0:
+                            ratings_sum += rating
+                            ratings_count += 1
+
+                        # 오늘 리뷰 수 계산
+                        review_date_str = review.get('created_at', '')
+                        if review_date_str:
+                            try:
+                                review_date = datetime.fromisoformat(review_date_str.replace('Z', '+00:00')).date()
+                                if review_date == today:
+                                    new_reviews_today += 1
+                            except:
+                                pass
+
+                        # 최근 리뷰 추가 (최대 10개)
+                        if len(recent_reviews) < 10:
+                            # 프론트엔드 호환 영어 형식으로 변경
+                            sentiment = 'positive' if rating >= 4 else 'negative' if rating <= 2 else 'neutral'
+                            reply_status = 'replied' if has_reply else 'pending'
+
+                            recent_reviews.append({
+                                "id": review.get('id', ''),
+                                "platform": platform,
+                                "store_name": store_name,
+                                "reviewer_name": review.get('reviewer_name', '익명'),
+                                "rating": rating,
+                                "review_text": review.get('review_text', '')[:100] + ('...' if len(review.get('review_text', '')) > 100 else ''),
+                                "sentiment": sentiment,
+                                "reply_status": reply_status,
+                                "review_date": review_date_str
+                            })
+            except Exception as store_error:
+                print(f"Error processing store {store_id}: {store_error}")
+                continue
 
         # 평균 평점 계산
         if ratings_count > 0:
             avg_rating = round(ratings_sum / ratings_count, 1)
 
+        # 답글률 계산
+        reply_rate = 0
+        if total_reviews > 0:
+            replied_reviews = total_reviews - pending_replies
+            reply_rate = round((replied_reviews / total_reviews) * 100, 1)
+
+        # 알림 생성
+        alerts = []
+        if len(stores) == 0:
+            alerts.append({
+                "type": "info",
+                "message": "등록된 매장이 없습니다. 첫 번째 매장을 등록해보세요!",
+                "action": "매장 등록하기"
+            })
+        else:
+            if pending_replies > 5:
+                alerts.append({
+                    "type": "warning",
+                    "message": f"{pending_replies}개의 답글 대기 중인 리뷰가 있습니다.",
+                    "action": "답글 작성하기"
+                })
+
+            if avg_rating > 0 and avg_rating < 3.0:
+                alerts.append({
+                    "type": "alert",
+                    "message": f"평균 평점이 {avg_rating}점으로 낮습니다.",
+                    "action": "리뷰 관리하기"
+                })
+
+            if new_reviews_today > 0:
+                alerts.append({
+                    "type": "info",
+                    "message": f"오늘 새로운 리뷰 {new_reviews_today}개가 등록되었습니다.",
+                    "action": "리뷰 확인하기"
+                })
+
         return {
             "success": True,
-            "stats": {
-                "totalStores": len(stores),
-                "totalReviews": total_reviews,
-                "pendingReplies": pending_replies,
-                "avgRating": avg_rating,
-                "recentActivity": {
-                    "today": 0,  # TODO: 실제 계산 필요
-                    "week": 0,
-                    "month": total_reviews
-                }
+            "data": {
+                "overview": {
+                    "total_stores": len(stores),
+                    "active_stores": active_stores,
+                    "total_reviews": total_reviews,
+                    "average_rating": avg_rating,
+                    "reply_rate": reply_rate,
+                    "new_reviews_today": new_reviews_today,
+                    "pending_replies": pending_replies
+                },
+                "recent_reviews": recent_reviews,
+                "alerts": alerts
             }
         }
     except Exception as e:
         print(f"Error fetching dashboard stats: {e}")
-        return {"success": False, "stats": None, "error": str(e)}
+        return {"success": False, "data": None, "error": str(e)}
+
+@app.get("/api/debug/stores")
+async def debug_stores():
+    """디버그: 모든 매장 정보 조회"""
+    try:
+        response = supabase.table('platform_stores').select('id, user_id, store_name, platform').limit(10).execute()
+        return {"success": True, "stores": response.data}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/dashboard/store-stats/{user_id}/{store_id}")
+async def get_store_dashboard_stats(user_id: str, store_id: str):
+    """특정 매장의 대시보드 통계 조회"""
+    try:
+        from datetime import datetime, timedelta
+
+        # 특정 스토어 조회 (보안을 위해 user_id 확인)
+        store_response = supabase.table('platform_stores').select('*').eq('id', store_id).eq('user_id', user_id).execute()
+
+        if not store_response.data:
+            return {"success": False, "data": None, "error": "Store not found or access denied"}
+
+        store = store_response.data[0]
+        platform = store['platform']
+        store_name = store.get('store_name', '알 수 없는 매장')
+        table_name = f'reviews_{platform}'
+
+        # 변수 초기화
+        total_reviews = 0
+        pending_replies = 0
+        avg_rating = 0
+        ratings_sum = 0
+        ratings_count = 0
+        new_reviews_today = 0
+        recent_reviews = []
+
+        # 오늘 날짜 계산
+        today = datetime.now().date()
+
+        try:
+            # 해당 매장의 리뷰 조회
+            reviews_response = supabase.table(table_name).select('*').eq('platform_store_id', store_id).order('created_at', desc=True).limit(50).execute()
+
+            if reviews_response.data:
+                total_reviews = len(reviews_response.data)
+
+                for review in reviews_response.data:
+                    # 답글 대기 중인 리뷰 계산
+                    has_reply = review.get('owner_reply') or review.get('reply_text')
+                    if not has_reply:
+                        pending_replies += 1
+
+                    # 평점 계산
+                    rating = review.get('rating', 0)
+                    if rating and rating > 0:
+                        ratings_sum += rating
+                        ratings_count += 1
+
+                    # 오늘 리뷰 수 계산
+                    review_date_str = review.get('created_at', '')
+                    if review_date_str:
+                        try:
+                            review_date = datetime.fromisoformat(review_date_str.replace('Z', '+00:00')).date()
+                            if review_date == today:
+                                new_reviews_today += 1
+                        except:
+                            pass
+
+                    # 최근 리뷰 추가 (최대 10개)
+                    if len(recent_reviews) < 10:
+                        sentiment = 'positive' if rating >= 4 else 'negative' if rating <= 2 else 'neutral'
+                        reply_status = 'replied' if has_reply else 'pending'
+
+                        recent_reviews.append({
+                            "id": review.get('id', ''),
+                            "platform": platform,
+                            "store_name": store_name,
+                            "reviewer_name": review.get('reviewer_name', '익명'),
+                            "rating": rating,
+                            "review_text": review.get('review_text', '')[:100] + ('...' if len(review.get('review_text', '')) > 100 else ''),
+                            "sentiment": sentiment,
+                            "reply_status": reply_status,
+                            "review_date": review_date_str
+                        })
+
+        except Exception as review_error:
+            print(f"Error processing reviews for store {store_id}: {review_error}")
+
+        # 평균 평점 계산
+        if ratings_count > 0:
+            avg_rating = round(ratings_sum / ratings_count, 1)
+
+        # 답글률 계산
+        reply_rate = 0
+        if total_reviews > 0:
+            replied_reviews = total_reviews - pending_replies
+            reply_rate = round((replied_reviews / total_reviews) * 100, 1)
+
+        # 매장별 알림 생성
+        alerts = []
+        if pending_replies > 3:
+            alerts.append({
+                "type": "warning",
+                "message": f"{store_name}에서 {pending_replies}개의 답글 대기 중입니다.",
+                "action": "답글 작성하기"
+            })
+
+        if avg_rating > 0 and avg_rating < 3.0:
+            alerts.append({
+                "type": "alert",
+                "message": f"{store_name}의 평균 평점이 {avg_rating}점으로 낮습니다.",
+                "action": "리뷰 관리하기"
+            })
+
+        if new_reviews_today > 0:
+            alerts.append({
+                "type": "info",
+                "message": f"{store_name}에 오늘 새로운 리뷰 {new_reviews_today}개가 등록되었습니다.",
+                "action": "리뷰 확인하기"
+            })
+
+        return {
+            "success": True,
+            "data": {
+                "overview": {
+                    "total_stores": 1,  # 단일 매장
+                    "active_stores": 1 if store.get('auto_reply_enabled', False) else 0,
+                    "total_reviews": total_reviews,
+                    "average_rating": avg_rating,
+                    "reply_rate": reply_rate,
+                    "new_reviews_today": new_reviews_today,
+                    "pending_replies": pending_replies,
+                    "store_info": {
+                        "name": store_name,
+                        "platform": platform,
+                        "auto_reply_enabled": store.get('auto_reply_enabled', False)
+                    }
+                },
+                "recent_reviews": recent_reviews,
+                "alerts": alerts
+            }
+        }
+
+    except Exception as e:
+        print(f"Error fetching store dashboard stats: {e}")
+        return {"success": False, "data": None, "error": str(e)}
 
 # 플랫폼 연결 엔드포인트
 @app.post("/api/v1/platform/connect")
