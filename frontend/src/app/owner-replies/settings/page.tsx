@@ -85,7 +85,8 @@ export default function ReplySettingsPage() {
     
     setLoadingStores(true)
     try {
-      const response = await fetch(`http://localhost:8002/api/user-stores/${user.id}`)
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
+      const response = await fetch(`${backendUrl}/api/user-stores/${user.id}`)
       const data = await response.json()
       
       if (data.success && data.stores) {
@@ -108,7 +109,8 @@ export default function ReplySettingsPage() {
     setLoading(true)
     
     try {
-      const response = await fetch(`http://localhost:8002/api/reply-settings/${store.id}`)
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
+      const response = await fetch(`${backendUrl}/api/reply-settings/${store.id}`)
       const data = await response.json()
       
       if (data.success && data.settings) {
@@ -152,7 +154,8 @@ export default function ReplySettingsPage() {
     
     setSaving(true)
     try {
-      const requestUrl = `http://localhost:8002/api/reply-settings/${selectedStore.id}`
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8002'
+      const requestUrl = `${backendUrl}/api/reply-settings/${selectedStore.id}`
       console.log('[FRONTEND DEBUG] 요청 URL:', requestUrl)
       
       const response = await fetch(requestUrl, {
