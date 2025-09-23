@@ -594,46 +594,23 @@ async def connect_platform(request_data: dict):
 
         if platform == 'coupangeats':
             try:
-                # 임시로 Mock 데이터 반환 (테스트용)
-                print(f"[DEBUG] CoupangEats mock crawling for {credentials.get('username', 'N/A')}")
+                from services.coupangeats.simple_crawler import CoupangEatsCrawler
 
-                mock_stores = [
-                    {
-                        "id": "mock-store-1",
-                        "name": "테스트 매장 1",
-                        "platform_store_id": "coupang-test-001",
-                        "platform_url": "https://partners.coupangeats.com/store/test-001"
-                    },
-                    {
-                        "id": "mock-store-2",
-                        "name": "테스트 매장 2",
-                        "platform_store_id": "coupang-test-002",
-                        "platform_url": "https://partners.coupangeats.com/store/test-002"
+                print(f"[DEBUG] CoupangEats real crawling for {credentials.get('username', 'N/A')}")
+
+                async with CoupangEatsCrawler() as crawler:
+                    success, stores, message = await crawler.crawl_stores(
+                        credentials.get('username', ''),
+                        credentials.get('password', '')
+                    )
+
+                    return {
+                        "success": success,
+                        "message": message,
+                        "stores": stores,
+                        "platform": platform,
+                        "timestamp": datetime.now().isoformat()
                     }
-                ]
-
-                return {
-                    "success": True,
-                    "message": "Mock 데이터로 매장 정보를 가져왔습니다 (테스트용)",
-                    "stores": mock_stores,
-                    "platform": platform,
-                    "timestamp": datetime.now().isoformat()
-                }
-
-                # 실제 크롤러 코드 (주석 처리)
-                # from services.coupangeats.simple_crawler import CoupangEatsCrawler
-                # async with CoupangEatsCrawler() as crawler:
-                #     success, stores, message = await crawler.crawl_stores(
-                #         credentials.get('username', ''),
-                #         credentials.get('password', '')
-                #     )
-                #     return {
-                #         "success": success,
-                #         "message": message,
-                #         "stores": stores,
-                #         "platform": platform,
-                #         "timestamp": datetime.now().isoformat()
-                #     }
             except Exception as e:
                 print(f"[ERROR] CoupangEats error: {e}")
                 return {
@@ -646,46 +623,23 @@ async def connect_platform(request_data: dict):
 
         elif platform == 'yogiyo':
             try:
-                # 임시로 Mock 데이터 반환 (테스트용)
-                print(f"[DEBUG] Yogiyo mock crawling for {credentials.get('username', 'N/A')}")
+                from services.yogiyo.simple_crawler import YogiyoCrawler
 
-                mock_stores = [
-                    {
-                        "id": "mock-yogiyo-1",
-                        "name": "요기요 테스트 매장 1",
-                        "platform_store_id": "yogiyo-test-001",
-                        "platform_url": "https://ceo.yogiyo.co.kr/store/test-001"
-                    },
-                    {
-                        "id": "mock-yogiyo-2",
-                        "name": "요기요 테스트 매장 2",
-                        "platform_store_id": "yogiyo-test-002",
-                        "platform_url": "https://ceo.yogiyo.co.kr/store/test-002"
+                print(f"[DEBUG] Yogiyo real crawling for {credentials.get('username', 'N/A')}")
+
+                async with YogiyoCrawler() as crawler:
+                    success, stores, message = await crawler.crawl_stores(
+                        credentials.get('username', ''),
+                        credentials.get('password', '')
+                    )
+
+                    return {
+                        "success": success,
+                        "message": message,
+                        "stores": stores,
+                        "platform": platform,
+                        "timestamp": datetime.now().isoformat()
                     }
-                ]
-
-                return {
-                    "success": True,
-                    "message": "Mock 데이터로 매장 정보를 가져왔습니다 (테스트용)",
-                    "stores": mock_stores,
-                    "platform": platform,
-                    "timestamp": datetime.now().isoformat()
-                }
-
-                # 실제 크롤러 코드 (주석 처리)
-                # from services.yogiyo.simple_crawler import YogiyoCrawler
-                # async with YogiyoCrawler() as crawler:
-                #     success, stores, message = await crawler.crawl_stores(
-                #         credentials.get('username', ''),
-                #         credentials.get('password', '')
-                #     )
-                #     return {
-                #         "success": success,
-                #         "message": message,
-                #         "stores": stores,
-                #         "platform": platform,
-                #         "timestamp": datetime.now().isoformat()
-                #     }
             except Exception as e:
                 print(f"[ERROR] Yogiyo error: {e}")
                 return {

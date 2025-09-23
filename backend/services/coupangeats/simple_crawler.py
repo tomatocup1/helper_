@@ -107,7 +107,7 @@ class CoupangEatsCrawler:
         
         # 직접 연결 설정 (프록시 없음)
         launch_options = {
-            'headless': False,  # 강제로 헤드리스 비활성화
+            'headless': True,  # 헤드리스 모드 활성화 (서버 환경용)
             'args': launch_args
         }
         
