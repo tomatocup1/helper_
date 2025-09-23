@@ -65,6 +65,7 @@ export default function ReplySettingsPage() {
   const [stores, setStores] = useState<Store[]>([])
   const [selectedStore, setSelectedStore] = useState<Store | null>(null)
   const [newKeyword, setNewKeyword] = useState('')
+  const [renderKey, setRenderKey] = useState(0) // 강제 리렌더링용
   
   const [settings, setSettings] = useState<ReplySettings>({
     autoReplyEnabled: false,
@@ -209,38 +210,45 @@ export default function ReplySettingsPage() {
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
 
-        // 현재 selectedStore 객체를 최신 값으로 업데이트
+        // 현재 selectedStore의 설정을 직접 업데이트
+        const updatedStore = {
+          ...selectedStore,
+          autoReplyEnabled: settings.autoReplyEnabled,
+          operationType: settings.operationType,
+          // 백엔드 형식으로도 유지
+          auto_reply_enabled: settings.autoReplyEnabled,
+          operation_type: settings.operationType
+        }
+
+        console.log('[FRONTEND DEBUG] 직접 생성한 updatedStore:', updatedStore)
+        console.log('[FRONTEND DEBUG] updatedStore.autoReplyEnabled:', updatedStore.autoReplyEnabled)
+        console.log('[FRONTEND DEBUG] updatedStore.operationType:', updatedStore.operationType)
+
+        setSelectedStore(updatedStore)
+
+        // stores 배열에서도 해당 매장 업데이트
+        setStores(prev => {
+          const updatedStores = prev.map(store => {
+            if (store.id === selectedStore.id) {
+              console.log('[FRONTEND DEBUG] stores 배열에서 매장 업데이트:', store.id)
+              console.log('[FRONTEND DEBUG] 이전 store:', store)
+              console.log('[FRONTEND DEBUG] 새로운 store:', updatedStore)
+              return updatedStore
+            }
+            return store
+          })
+          console.log('[FRONTEND DEBUG] 업데이트된 stores 배열:', updatedStores)
+          return updatedStores
+        })
+
+        // 강제 리렌더링 트리거
+        setRenderKey(prev => prev + 1)
+
+        // 서버 응답 확인 (참고용)
         if (data.updated_store) {
           console.log('[FRONTEND DEBUG] 서버에서 받은 updated_store:', data.updated_store)
-          console.log('[FRONTEND DEBUG] updated_store의 auto_reply_enabled:', data.updated_store.auto_reply_enabled)
-          console.log('[FRONTEND DEBUG] updated_store의 operation_type:', data.updated_store.operation_type)
-
-          const transformedStore = {
-            ...data.updated_store,
-            autoReplyEnabled: data.updated_store.auto_reply_enabled || false,
-            operationType: data.updated_store.operation_type || 'both'
-          }
-
-          console.log('[FRONTEND DEBUG] 변환된 transformedStore:', transformedStore)
-          console.log('[FRONTEND DEBUG] 변환된 autoReplyEnabled:', transformedStore.autoReplyEnabled)
-          console.log('[FRONTEND DEBUG] 변환된 operationType:', transformedStore.operationType)
-
-          setSelectedStore(transformedStore)
-
-          // stores 배열에서도 해당 매장 업데이트
-          setStores(prev => {
-            const updatedStores = prev.map(store => {
-              if (store.id === selectedStore.id) {
-                console.log('[FRONTEND DEBUG] stores 배열에서 매장 업데이트:', store.id, '→', transformedStore)
-                return transformedStore
-              }
-              return store
-            })
-            console.log('[FRONTEND DEBUG] 업데이트된 stores 배열:', updatedStores)
-            return updatedStores
-          })
         } else {
-          console.log('[FRONTEND DEBUG] 서버 응답에 updated_store가 없음')
+          console.log('[FRONTEND DEBUG] 서버 응답에 updated_store가 없음 - 클라이언트에서 직접 업데이트 처리')
         }
 
         console.log('[FRONTEND DEBUG] ===== 설정 저장 완료 =====')
@@ -455,7 +463,7 @@ export default function ReplySettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="space-y-1">
+                <div className="space-y-1" key={renderKey}>
                   {stores.map((store) => {
                     console.log('[FRONTEND DEBUG] 매장 렌더링:', store.store_name, 'autoReplyEnabled:', store.autoReplyEnabled, 'operationType:', store.operationType)
                     console.log('[FRONTEND DEBUG] store 전체 객체:', store)
