@@ -23,6 +23,9 @@ import {
 
 type Platform = 'naver' | 'baemin' | 'yogiyo' | 'coupangeats'
 
+// 백엔드 URL 상수
+const BACKEND_URL = 'https://helper-backend-4ilp.onrender.com'
+
 interface PlatformInfo {
   id: Platform
   name: string
@@ -129,21 +132,23 @@ export default function AddStorePage() {
 
   const handleConnect = async () => {
     if (!validateForm() || !selectedPlatform) return
-    
+
     setIsConnecting(true)
     setCurrentStep(3)
-    
+
     try {
-      // 실제 API 호출
-      const response = await fetch('/api/v1/platform/connect', {
+      // Render 백엔드로 직접 API 호출
+      const response = await fetch(`${BACKEND_URL}/api/v1/platform/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           platform: selectedPlatform,
-          platform_id: formData.platform_id,
-          platform_password: formData.platform_password,
+          credentials: {
+            username: formData.platform_id,
+            password: formData.platform_password
+          },
           user_id: user?.id || 'a7654c42-10ed-435f-97d8-d2c2dfeccbcb' // 실제 로그인된 사용자 ID
         })
       })
@@ -202,7 +207,7 @@ export default function AddStorePage() {
       )
 
       for (const store of selectedStoreData) {
-        const response = await fetch('/api/v1/stores', {
+        const response = await fetch(`${BACKEND_URL}/api/stores`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -214,7 +219,7 @@ export default function AddStorePage() {
             store_name: store.name,
             platform_url: store.platform_url,
             platform_id: formData.platform_id,
-            platform_password: formData.platform_password,
+            platform_pw: formData.platform_password,
           })
         })
 
