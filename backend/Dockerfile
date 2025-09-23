@@ -2,28 +2,12 @@
 FROM python:3.11-slim
 
 # 시스템 업데이트 및 필수 패키지 설치
+# Playwright Chrome 실행에 필요한 최소 패키지만 설치
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     unzip \
     curl \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libatspi2.0-0 \
-    libdrm2 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    libxss1 \
-    libgconf-2-4 \
     && rm -rf /var/lib/apt/lists/*
 
 # 작업 디렉토리 설정
