@@ -106,37 +106,57 @@ export default function ReplySettingsPage() {
 
   // 매장 선택 및 설정 로드
   const selectStore = async (store: Store) => {
+    console.log('[FRONTEND DEBUG] 매장 선택:', store)
     setSelectedStore(store)
     setLoading(true)
-    
+
+    // 먼저 매장 데이터에서 설정을 추출해서 기본값으로 설정
+    const storeSettings = {
+      autoReplyEnabled: (store as any).auto_reply_enabled || false,
+      replyTone: ((store as any).reply_tone || 'friendly') as 'friendly' | 'formal' | 'casual',
+      minReplyLength: (store as any).min_reply_length || 50,
+      maxReplyLength: (store as any).max_reply_length || 200,
+      brandVoice: (store as any).brand_voice || '',
+      greetingTemplate: (store as any).greeting_template || '',
+      closingTemplate: (store as any).closing_template || '',
+      seoKeywords: (store as any).seo_keywords || [],
+      autoApprovalDelayHours: (store as any).auto_approval_delay_hours || 48,
+      operationType: ((store as any).operation_type || 'both') as 'delivery_only' | 'dine_in_only' | 'takeout_only' | 'both'
+    }
+
+    console.log('[FRONTEND DEBUG] 매장에서 추출한 설정:', storeSettings)
+
     try {
-      // Vercel 환경변수가 적용되지 않아 직접 하드코딩
+      // 백엔드에서 최신 설정 조회 (실패해도 매장 데이터 사용)
       const backendUrl = 'https://helper-backend-4ilp.onrender.com'
+      console.log('[FRONTEND DEBUG] 설정 조회 URL:', `${backendUrl}/api/reply-settings/${store.id}`)
+
       const response = await fetch(`${backendUrl}/api/reply-settings/${store.id}`)
-      const data = await response.json()
-      
-      if (data.success && data.settings) {
-        setSettings({
-          ...data.settings,
-          seoKeywords: data.settings.seoKeywords || [],
-          operationType: data.settings.operationType || 'both'
-        })
+      console.log('[FRONTEND DEBUG] 설정 조회 응답 상태:', response.status)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('[FRONTEND DEBUG] 설정 조회 응답:', data)
+
+        if (data.success && data.settings) {
+          console.log('[FRONTEND DEBUG] 백엔드에서 가져온 설정 사용')
+          setSettings({
+            ...data.settings,
+            seoKeywords: data.settings.seoKeywords || [],
+            operationType: data.settings.operationType || 'both'
+          })
+        } else {
+          console.log('[FRONTEND DEBUG] 백엔드 설정 실패, 매장 데이터 사용')
+          setSettings(storeSettings)
+        }
+      } else {
+        console.log('[FRONTEND DEBUG] HTTP 오류, 매장 데이터 사용')
+        setSettings(storeSettings)
       }
     } catch (error) {
-      console.error('매장 설정 로드 실패:', error)
-      // 매장 데이터에서 기본값 설정
-      setSettings({
-        autoReplyEnabled: store.autoReplyEnabled,
-        replyTone: store.replyTone as 'friendly' | 'formal' | 'casual',
-        minReplyLength: store.minReplyLength,
-        maxReplyLength: store.maxReplyLength,
-        brandVoice: store.brandVoice,
-        greetingTemplate: store.greetingTemplate,
-        closingTemplate: store.closingTemplate,
-        seoKeywords: store.seoKeywords || [],
-        autoApprovalDelayHours: store.autoApprovalDelayHours,
-        operationType: store.operationType || 'both'
-      })
+      console.error('[FRONTEND DEBUG] 설정 조회 오류:', error)
+      console.log('[FRONTEND DEBUG] 오류 발생, 매장 데이터 사용')
+      setSettings(storeSettings)
     } finally {
       setLoading(false)
     }
