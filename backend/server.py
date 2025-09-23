@@ -161,9 +161,9 @@ async def get_reply_settings(store_id: str):
                     "brandVoice": settings.get("brand_voice", ""),
                     "greetingTemplate": settings.get("greeting_template", ""),
                     "closingTemplate": settings.get("closing_template", ""),
-                    "seoKeywords": [],  # 임시 기본값 (DB 컬럼 없음)
-                    "autoApprovalDelayHours": 48,  # 임시 기본값 (DB 컬럼 없음)
-                    "operationType": "both"  # 임시 기본값 (DB 컬럼 없음)
+                    "seoKeywords": settings.get("seo_keywords", []),
+                    "autoApprovalDelayHours": settings.get("negative_review_delay_hours", 48),
+                    "operationType": settings.get("operation_type", "both")
                 }
             }
         else:
@@ -183,7 +183,7 @@ async def update_reply_settings(store_id: str, settings: ReplySettings):
         print(f"[BACKEND DEBUG] 설정 저장 요청: store_id={store_id}")
         print(f"[BACKEND DEBUG] 받은 설정: {settings}")
 
-        # platform_stores 테이블 형식으로 변환 (누락된 컬럼 제외)
+        # platform_stores 테이블 형식으로 변환 (실제 스키마에 맞춤)
         db_settings = {
             "auto_reply_enabled": settings.autoReplyEnabled,
             "reply_tone": settings.replyTone,
@@ -191,11 +191,11 @@ async def update_reply_settings(store_id: str, settings: ReplySettings):
             "max_reply_length": settings.maxReplyLength,
             "brand_voice": settings.brandVoice or "",
             "greeting_template": settings.greetingTemplate or "",
-            "closing_template": settings.closingTemplate or ""
+            "closing_template": settings.closingTemplate or "",
+            "seo_keywords": settings.seoKeywords,
+            "operation_type": settings.operationType,
+            "negative_review_delay_hours": settings.autoApprovalDelayHours  # 스키마의 실제 컬럼명
         }
-
-        # seo_keywords와 auto_approval_delay_hours는 테이블에 컬럼이 없으면 제외
-        # 향후 데이터베이스 마이그레이션 후 추가 예정
 
         print(f"[BACKEND DEBUG] DB 설정 변환: {db_settings}")
 
