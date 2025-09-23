@@ -20,7 +20,9 @@
       "Bash(git push:*)",
       "Bash(curl:*)",
       "Bash(cat:*)",
-      "Bash(npx vercel:*)"
+      "Bash(npx vercel:*)",
+      "Bash(git checkout:*)",
+      "Bash(git tag:*)"
     ],
     "deny": [],
     "ask": [],
