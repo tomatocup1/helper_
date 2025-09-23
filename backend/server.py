@@ -77,6 +77,38 @@ async def api_status():
         "status": "operational"
     }
 
+# 스토어 관련 엔드포인트
+@app.get("/api/stores")
+async def get_stores():
+    """모든 스토어 목록 조회"""
+    try:
+        response = supabase.table('stores').select("*").execute()
+        return {"success": True, "stores": response.data}
+    except Exception as e:
+        print(f"Error fetching stores: {e}")
+        return {"success": False, "stores": [], "error": str(e)}
+
+@app.get("/api/user-stores/{user_id}")
+async def get_user_stores(user_id: str):
+    """특정 사용자의 스토어 목록 조회"""
+    try:
+        # stores 테이블에서 user_id로 조회
+        response = supabase.table('stores').select("*").eq('user_id', user_id).execute()
+        return {"success": True, "stores": response.data}
+    except Exception as e:
+        print(f"Error fetching user stores: {e}")
+        return {"success": False, "stores": [], "error": str(e)}
+
+@app.post("/api/stores")
+async def create_store(store_data: dict):
+    """새 스토어 생성"""
+    try:
+        response = supabase.table('stores').insert(store_data).execute()
+        return {"success": True, "store": response.data[0] if response.data else None}
+    except Exception as e:
+        print(f"Error creating store: {e}")
+        return {"success": False, "error": str(e)}
+
 # 크롤러 관련 엔드포인트
 @app.post("/crawler/start")
 async def start_crawler(store_id: str):
@@ -100,6 +132,83 @@ async def list_schedules():
 @app.post("/ai/generate-reply")
 async def generate_reply(review_data: dict):
     return {"reply": "감사합니다. 더 나은 서비스를 제공하도록 노력하겠습니다."}
+
+# 답글 설정 관련 엔드포인트
+@app.get("/api/reply-settings/{user_id}")
+async def get_reply_settings(user_id: str):
+    """사용자 답글 설정 조회"""
+    try:
+        # ai_reply_settings 테이블에서 user_id로 조회
+        response = supabase.table('ai_reply_settings').select("*").eq('user_id', user_id).execute()
+
+        if response.data and len(response.data) > 0:
+            settings = response.data[0]
+            return {
+                "success": True,
+                "settings": {
+                    "autoReplyEnabled": settings.get("auto_reply_enabled", False),
+                    "replyTone": settings.get("reply_tone", "friendly"),
+                    "minReplyLength": settings.get("min_reply_length", 50),
+                    "maxReplyLength": settings.get("max_reply_length", 200),
+                    "brandVoice": settings.get("brand_voice", ""),
+                    "greetingTemplate": settings.get("greeting_template", ""),
+                    "closingTemplate": settings.get("closing_template", ""),
+                    "seoKeywords": settings.get("seo_keywords", []),
+                    "autoApprovalDelayHours": settings.get("auto_approval_delay_hours", 48)
+                }
+            }
+        else:
+            # 기본 설정 반환
+            return {
+                "success": True,
+                "settings": {
+                    "autoReplyEnabled": False,
+                    "replyTone": "friendly",
+                    "minReplyLength": 50,
+                    "maxReplyLength": 200,
+                    "brandVoice": "",
+                    "greetingTemplate": "",
+                    "closingTemplate": "",
+                    "seoKeywords": [],
+                    "autoApprovalDelayHours": 48
+                }
+            }
+    except Exception as e:
+        print(f"Error fetching reply settings: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/reply-settings/{user_id}")
+async def update_reply_settings(user_id: str, settings: ReplySettings):
+    """사용자 답글 설정 업데이트"""
+    try:
+        # DB 형식으로 변환
+        db_settings = {
+            "user_id": user_id,
+            "auto_reply_enabled": settings.autoReplyEnabled,
+            "reply_tone": settings.replyTone,
+            "min_reply_length": settings.minReplyLength,
+            "max_reply_length": settings.maxReplyLength,
+            "brand_voice": settings.brandVoice,
+            "greeting_template": settings.greetingTemplate,
+            "closing_template": settings.closingTemplate,
+            "seo_keywords": settings.seoKeywords,
+            "auto_approval_delay_hours": settings.autoApprovalDelayHours
+        }
+
+        # 기존 설정이 있는지 확인
+        existing = supabase.table('ai_reply_settings').select("*").eq('user_id', user_id).execute()
+
+        if existing.data and len(existing.data) > 0:
+            # 업데이트
+            response = supabase.table('ai_reply_settings').update(db_settings).eq('user_id', user_id).execute()
+        else:
+            # 새로 생성
+            response = supabase.table('ai_reply_settings').insert(db_settings).execute()
+
+        return {"success": True, "message": "Settings updated successfully"}
+    except Exception as e:
+        print(f"Error updating reply settings: {e}")
+        return {"success": False, "error": str(e)}
 
 # 플랫폼 연결 엔드포인트
 @app.post("/api/v1/platform/connect")
