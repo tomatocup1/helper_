@@ -138,12 +138,15 @@ async def generate_reply(review_data: dict):
     return {"reply": "감사합니다. 더 나은 서비스를 제공하도록 노력하겠습니다."}
 
 # 답글 설정 관련 엔드포인트
-@app.get("/api/reply-settings/{user_id}")
-async def get_reply_settings(user_id: str):
-    """사용자 답글 설정 조회"""
+@app.get("/api/reply-settings/{store_id}")
+async def get_reply_settings(store_id: str):
+    """매장 답글 설정 조회 (platform_stores 테이블 사용)"""
     try:
-        # ai_reply_settings 테이블에서 user_id로 조회
-        response = supabase.table('ai_reply_settings').select("*").eq('user_id', user_id).execute()
+        print(f"[BACKEND DEBUG] 설정 조회 요청: store_id={store_id}")
+
+        # platform_stores 테이블에서 store_id로 조회
+        response = supabase.table('platform_stores').select("*").eq('id', store_id).execute()
+        print(f"[BACKEND DEBUG] 조회 결과: {response}")
 
         if response.data and len(response.data) > 0:
             settings = response.data[0]
@@ -162,35 +165,24 @@ async def get_reply_settings(user_id: str):
                 }
             }
         else:
-            # 기본 설정 반환
+            print(f"[BACKEND DEBUG] 매장을 찾을 수 없음: {store_id}")
             return {
-                "success": True,
-                "settings": {
-                    "autoReplyEnabled": False,
-                    "replyTone": "friendly",
-                    "minReplyLength": 50,
-                    "maxReplyLength": 200,
-                    "brandVoice": "",
-                    "greetingTemplate": "",
-                    "closingTemplate": "",
-                    "seoKeywords": [],
-                    "autoApprovalDelayHours": 48
-                }
+                "success": False,
+                "error": f"Store not found: {store_id}"
             }
     except Exception as e:
-        print(f"Error fetching reply settings: {e}")
+        print(f"[BACKEND DEBUG] 설정 조회 오류: {e}")
         return {"success": False, "error": str(e)}
 
-@app.post("/api/reply-settings/{user_id}")
-async def update_reply_settings(user_id: str, settings: ReplySettings):
-    """사용자 답글 설정 업데이트"""
+@app.post("/api/reply-settings/{store_id}")
+async def update_reply_settings(store_id: str, settings: ReplySettings):
+    """매장 답글 설정 업데이트 (platform_stores 테이블 사용)"""
     try:
-        print(f"[BACKEND DEBUG] 설정 저장 요청: user_id={user_id}")
+        print(f"[BACKEND DEBUG] 설정 저장 요청: store_id={store_id}")
         print(f"[BACKEND DEBUG] 받은 설정: {settings}")
 
-        # DB 형식으로 변환
+        # platform_stores 테이블 형식으로 변환
         db_settings = {
-            "user_id": user_id,
             "auto_reply_enabled": settings.autoReplyEnabled,
             "reply_tone": settings.replyTone,
             "min_reply_length": settings.minReplyLength,
@@ -204,33 +196,20 @@ async def update_reply_settings(user_id: str, settings: ReplySettings):
 
         print(f"[BACKEND DEBUG] DB 설정 변환: {db_settings}")
 
-        # ai_reply_settings 테이블이 없으면 platform_stores 테이블을 사용하여 임시 저장
-        try:
-            # 기존 설정이 있는지 확인
-            existing = supabase.table('ai_reply_settings').select("*").eq('user_id', user_id).execute()
-            print(f"[BACKEND DEBUG] 기존 설정 조회 결과: {existing}")
+        # platform_stores 테이블에서 매장 설정 업데이트
+        response = supabase.table('platform_stores').update(db_settings).eq('id', store_id).execute()
+        print(f"[BACKEND DEBUG] 업데이트 결과: {response}")
 
-            if existing.data and len(existing.data) > 0:
-                # 업데이트
-                response = supabase.table('ai_reply_settings').update(db_settings).eq('user_id', user_id).execute()
-                print(f"[BACKEND DEBUG] 업데이트 결과: {response}")
-            else:
-                # 새로 생성
-                response = supabase.table('ai_reply_settings').insert(db_settings).execute()
-                print(f"[BACKEND DEBUG] 삽입 결과: {response}")
-
-            return {"success": True, "message": "Settings updated successfully"}
-
-        except Exception as table_error:
-            print(f"[BACKEND DEBUG] ai_reply_settings 테이블 오류: {table_error}")
-            print(f"[BACKEND DEBUG] 대안으로 설정을 세션에 저장합니다")
-
-            # 임시 방안: 메모리에 저장 (실제 운영에서는 다른 테이블 사용)
-            # 여기서는 일단 성공으로 응답
+        if response.data and len(response.data) > 0:
             return {
                 "success": True,
-                "message": "Settings saved temporarily (ai_reply_settings table not available)",
-                "note": "Please create ai_reply_settings table in database"
+                "message": "Settings updated successfully",
+                "updated_store": response.data[0]
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Store not found or update failed"
             }
 
     except Exception as e:
