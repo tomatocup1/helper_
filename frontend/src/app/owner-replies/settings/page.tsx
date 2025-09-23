@@ -91,10 +91,17 @@ export default function ReplySettingsPage() {
       const data = await response.json()
       
       if (data.success && data.stores) {
-        setStores(data.stores)
+        // 백엔드 데이터를 프론트엔드 형식에 맞게 변환
+        const transformedStores = data.stores.map((store: any) => ({
+          ...store,
+          autoReplyEnabled: store.auto_reply_enabled || false,
+          operationType: store.operation_type || 'both'
+        }))
+        console.log('[FRONTEND DEBUG] 변환된 매장 데이터:', transformedStores)
+        setStores(transformedStores)
         // 첫 번째 매장을 자동 선택
-        if (data.stores.length > 0) {
-          selectStore(data.stores[0])
+        if (transformedStores.length > 0) {
+          selectStore(transformedStores[0])
         }
       }
     } catch (error) {
@@ -201,9 +208,22 @@ export default function ReplySettingsPage() {
         
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
-        // 매장 목록 새로고침
-        await loadStores()
-        
+
+        // 현재 selectedStore 객체를 최신 값으로 업데이트
+        if (data.updated_store) {
+          const transformedStore = {
+            ...data.updated_store,
+            autoReplyEnabled: data.updated_store.auto_reply_enabled || false,
+            operationType: data.updated_store.operation_type || 'both'
+          }
+          setSelectedStore(transformedStore)
+
+          // stores 배열에서도 해당 매장 업데이트
+          setStores(prev => prev.map(store =>
+            store.id === selectedStore.id ? transformedStore : store
+          ))
+        }
+
         console.log('[FRONTEND DEBUG] ===== 설정 저장 완료 =====')
       } else {
         console.error('[FRONTEND DEBUG] 서버에서 실패 응답:', data)
@@ -436,14 +456,14 @@ export default function ReplySettingsPage() {
                       </p>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-gray-500">운영 방식</span>
-                        {getOperationTypeBadge(store.operationType)}
+                        {getOperationTypeBadge((store as any).operation_type || 'both')}
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-500">
                           AI 답글
                         </span>
-                        <Badge variant={store.autoReplyEnabled ? "default" : "secondary"}>
-                          {store.autoReplyEnabled ? "ON" : "OFF"}
+                        <Badge variant={(store as any).auto_reply_enabled ? "default" : "secondary"}>
+                          {(store as any).auto_reply_enabled ? "ON" : "OFF"}
                         </Badge>
                       </div>
                     </div>
