@@ -2,12 +2,6 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/store/auth-store-supabase'
-import { initSupabaseConfigCheck } from '@/lib/validation/env-validator'
-
-// 개발 환경에서 Supabase 설정 검사 초기화
-if (process.env.NODE_ENV === 'development') {
-  initSupabaseConfigCheck()
-}
 
 const inter = Inter({ subsets: ['latin'] })
 
