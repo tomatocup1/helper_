@@ -1,0 +1,36 @@
+services:
+  # Python 백엔드 서비스
+  - type: web
+    name: store-helper-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    env: python
+    plan: starter
+    region: singapore
+    buildCommand: ""
+    startCommand: "uvicorn server:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PORT
+        value: 8001
+      - key: PYTHONPATH
+        value: /app
+      - key: PYTHONIOENCODING
+        value: utf-8
+      - key: PYTHONUTF8
+        value: "1"
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /ms-playwright
+      # 환경변수는 Render 대시보드에서 직접 설정
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: NAVER_ENCRYPTION_KEY
+        sync: false
+      - key: BAEMIN_ENCRYPTION_KEY
+        sync: false
+      - key: COUPANGEATS_ENCRYPTION_KEY
+        sync: false
+      - key: YOGIYO_ENCRYPTION_KEY
+        sync: false

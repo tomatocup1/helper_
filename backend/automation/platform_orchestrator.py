@@ -21,8 +21,8 @@ sys.path.insert(0, os.path.join(project_root, 'core'))
 from automation.user_manager import UserManager, StoreInfo, UserInfo
 from core.password_decrypt import decrypt_password
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# 로깅 설정 (DEBUG 레벨로 변경)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -43,6 +43,20 @@ class PlatformOrchestrator:
         self.user_manager = UserManager()
         self.core_path = os.path.join(project_root, 'core')
         self.ai_reply_path = os.path.join(self.core_path, 'ai_reply')
+
+    def _get_utf8_env(self) -> Dict[str, str]:
+        """UTF-8 환경변수가 설정된 환경변수 딕셔너리 반환"""
+        env = os.environ.copy()
+
+        # UTF-8 강제 설정
+        env['PYTHONIOENCODING'] = 'utf-8'
+        env['PYTHONUTF8'] = '1'
+
+        # Windows 콘솔 인코딩 설정
+        if os.name == 'nt':
+            env['PYTHONLEGACYWINDOWSSTDIO'] = '0'
+
+        return env
 
     def get_platform_scripts(self) -> Dict[str, Dict[str, str]]:
         """플랫폼별 스크립트 경로 반환"""
@@ -106,8 +120,7 @@ class PlatformOrchestrator:
                     "--username", store.platform_id,
                     "--password", decrypted_password,
                     "--store-id", store.platform_store_id,
-                    "--user-id", store.user_id,
-                    "--headless"
+                    "--user-id", store.user_id
                 ])
             elif platform == 'yogiyo':
                 cmd.extend([
@@ -127,22 +140,84 @@ class PlatformOrchestrator:
                 ])
 
             logger.info(f"[{platform}] 크롤링 시작: {store.store_name}")
+            logger.debug(f"[{platform}] 실행 명령어: {' '.join(cmd)}")
+            logger.debug(f"[{platform}] 작업 디렉토리: {self.core_path}")
 
-            # 크롤러 실행 (Windows 인코딩 문제 해결)
-            result = subprocess.run(
+            # 크롤러 파일 존재 확인
+            crawler_path = os.path.join(self.core_path, os.path.basename(crawler_script))
+            logger.debug(f"[{platform}] 크롤러 파일 경로: {crawler_path}")
+            logger.debug(f"[{platform}] 크롤러 파일 존재: {os.path.exists(crawler_path)}")
+
+            # 환경 확인
+            logger.debug(f"[{platform}] 현재 작업 디렉토리: {os.getcwd()}")
+            logger.debug(f"[{platform}] Python 실행 파일: {sys.executable}")
+
+            # 크롤러 실행 (실시간 출력을 위해 Popen 사용)
+            # 환경변수 상속하여 subprocess 실행
+            import subprocess
+
+            # Popen으로 실시간 출력 확인
+            process = subprocess.Popen(
                 cmd,
                 cwd=self.core_path,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=300,  # 5분 타임아웃
                 encoding='utf-8',
-                errors='replace'
+                errors='replace',
+                env=self._get_utf8_env(),
+                shell=False
             )
+
+            # 실시간 출력 읽기
+            stdout_lines = []
+            stderr_lines = []
+
+            try:
+                stdout, stderr = process.communicate(timeout=300)  # 5분 타임아웃
+                stdout_lines = stdout.split('\n') if stdout else []
+                stderr_lines = stderr.split('\n') if stderr else []
+
+                # 결과 객체 생성 (기존 호환성 유지)
+                class Result:
+                    def __init__(self, returncode, stdout, stderr):
+                        self.returncode = returncode
+                        self.stdout = stdout
+                        self.stderr = stderr
+
+                result = Result(process.returncode, stdout, stderr)
+
+            except subprocess.TimeoutExpired:
+                process.kill()
+                raise
 
             execution_time = (datetime.now() - start_time).total_seconds()
 
             if result.returncode == 0:
                 logger.info(f"[{platform}] 크롤링 완료: {store.store_name} ({execution_time:.1f}초)")
+
+                # 상세 로그 출력 (크롤링 진행 상황 확인)
+                if result.stdout.strip():
+                    stdout_lines = result.stdout.strip().split('\n')
+
+                    # 중요한 로그 라인들을 INFO 레벨로 출력
+                    important_keywords = [
+                        'CRAWLING_RESULT:', '[START]', '[SUCCESS]', '[ERROR]',
+                        '[SCROLL]', '[TARGET]', '[SEARCH]', '미답변', '리뷰',
+                        'reviews_found', 'reviews_new'
+                    ]
+
+                    for line in stdout_lines:
+                        if any(keyword in line for keyword in important_keywords):
+                            logger.info(f"[{platform}] {line.strip()}")
+
+                    # 전체 STDOUT도 DEBUG 레벨로 출력
+                    logger.debug(f"[{platform}] 전체 STDOUT: {result.stdout.strip()}")
+
+                # 성공해도 stderr가 있으면 경고 출력 (팝업 관련 로그 확인용)
+                if result.stderr.strip():
+                    logger.warning(f"[{platform}] 크롤링 경고 로그: {result.stderr.strip()}")
+
                 return ExecutionResult(
                     success=True,
                     message=f"크롤링 완료",
@@ -150,7 +225,9 @@ class PlatformOrchestrator:
                     details={"stdout": result.stdout, "stderr": result.stderr}
                 )
             else:
-                logger.error(f"[{platform}] 크롤링 실패: {store.store_name} - {result.stderr}")
+                logger.error(f"[{platform}] 크롤링 실패: {store.store_name}")
+                logger.error(f"[{platform}] STDOUT: {result.stdout}")
+                logger.error(f"[{platform}] STDERR: {result.stderr}")
                 return ExecutionResult(
                     success=False,
                     message=f"크롤링 실패: {result.stderr[:200]}",
@@ -198,7 +275,8 @@ class PlatformOrchestrator:
                 text=True,
                 timeout=600,  # 10분 타임아웃 (네이버는 무한스크롤로 시간이 더 필요)
                 encoding='utf-8',
-                errors='replace'
+                errors='replace',
+                env=self._get_utf8_env()
             )
 
             execution_time = (datetime.now() - start_time).total_seconds()
@@ -279,7 +357,8 @@ class PlatformOrchestrator:
                 text=True,
                 timeout=600,  # 10분 타임아웃 (네이버는 무한스크롤로 시간이 더 필요)
                 encoding='utf-8',
-                errors='replace'
+                errors='replace',
+                env=self._get_utf8_env()
             )
 
             execution_time = (datetime.now() - start_time).total_seconds()
