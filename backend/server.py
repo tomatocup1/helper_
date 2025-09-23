@@ -50,9 +50,16 @@ class StoreInfo(BaseModel):
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 모든 도메인 허용 (프로덕션에서는 특정 도메인만 지정 권장)
+    allow_origins=[
+        "https://helper-2-6f1fjj449-tomatocup1s-projects.vercel.app",
+        "https://helper-2-ofwvbckme-tomatocup1s-projects.vercel.app",
+        "https://*.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:4000",
+        "*"  # 모든 도메인 허용 (개발용)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
