@@ -20,9 +20,9 @@ sys.path.insert(0, os.path.join(project_root, 'core'))
 from automation.user_manager import UserManager, UserInfo
 from automation.platform_orchestrator import PlatformOrchestrator
 
-# 로깅 설정
+# 로깅 설정 (DEBUG 레벨로 변경)
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),

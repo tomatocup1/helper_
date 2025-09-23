@@ -99,16 +99,20 @@ class AIReplyManager:
     """AI 답글 생성 및 관리 통합 시스템 - 다중 플랫폼 지원"""
     
     def __init__(self):
+        # 로거 초기화
+        import logging
+        self.logger = logging.getLogger(__name__)
+
         # OpenAI 클라이언트 초기화
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
             raise ValueError("OPENAI_API_KEY 환경 변수가 설정되지 않았습니다")
-        
+
         self.openai_client = openai.AsyncOpenAI(api_key=api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
         self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '400'))
         self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.7'))  # 더 일관된 응답을 위해 낮춤
-        
+
         # 한국형 답글 생성기 초기화
         self.korean_generator = KoreanReplyGenerator()
         
@@ -1704,8 +1708,9 @@ JSON 형식으로 응답해주세요:
                 # AI 분석 결과
                 'sentiment': analysis.sentiment,
                 'sentiment_score': analysis.sentiment_score,
-                'extracted_keywords': analysis.keywords,
-                
+                # extracted_keywords는 크롤링에서 가져온 원본 키워드이므로 덮어쓰지 않음
+                # 'extracted_keywords': analysis.keywords,  # 이 라인 제거!
+
                 # AI 답글 정보
                 'ai_generated_reply': result.ai_generated_reply,
                 'ai_model_used': result.ai_model_used,

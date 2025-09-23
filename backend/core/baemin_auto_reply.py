@@ -25,7 +25,7 @@ async def main():
     parser = argparse.ArgumentParser(description='배달의민족 답글 자동 등록 (Supabase 연동)')
     parser.add_argument('--user-id', help='사용자 ID (미지정시 기본값 사용)')
     parser.add_argument('--store-id', help='특정 매장 ID만 처리')
-    parser.add_argument('--max-replies', type=int, default=10, help='최대 답글 등록 수 (기본: 10)')
+    parser.add_argument('--max-replies', type=int, default=0, help='최대 답글 등록 수 (기본: 0=무제한)')
     parser.add_argument('--headless', action='store_true', help='헤드리스 모드')
     parser.add_argument('--dry-run', action='store_true', help='실제 등록 없이 대상 리뷰만 확인')
     
@@ -86,13 +86,17 @@ async def main():
         print(f"{'='*50}")
         
         # 답글 대기 리뷰 확인 (AI가 답글을 생성한 리뷰)
-        reviews_result = supabase.table('reviews_baemin')\
+        query = supabase.table('reviews_baemin')\
             .select('id, baemin_review_id, reviewer_name, rating')\
             .eq('platform_store_id', store_uuid)\
             .eq('reply_status', 'draft')\
-            .neq('reply_text', None)\
-            .limit(args.max_replies)\
-            .execute()
+            .neq('reply_text', None)
+
+        # 0은 무제한을 의미
+        if args.max_replies > 0:
+            query = query.limit(args.max_replies)
+
+        reviews_result = query.execute()
         
         if not reviews_result.data:
             print("[INFO] 답글 대기 리뷰가 없습니다.")

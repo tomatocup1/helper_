@@ -22,8 +22,10 @@ from dotenv import load_dotenv
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir))
 
+from utils.popup_handler import PopupHandler
+
 class BaeminReplyPoster:
-    def __init__(self, headless=True, timeout=30000):
+    def __init__(self, headless=False, timeout=30000):
         self.headless = headless
         self.timeout = timeout
         self.browser = None
@@ -97,9 +99,12 @@ class BaeminReplyPoster:
             
             await self.page.wait_for_timeout(3000)
             
-            # 팝업 닫기 시도
-            await self._close_popup_if_exists(self.page)
-            
+            # 팝업 닫기 시도 (새로운 범용 핸들러 사용)
+            await PopupHandler.handle_baemin_popup(self.page)
+
+            # 4.5. 날짜 필터 선택 (최근 30일로 설정)
+            await self._set_date_filter(self.page, 30)
+
             # 5. 미답변 탭 클릭 (답글 등록할 리뷰만 표시)
             try:
                 # 여러 가능한 미답변 탭 선택자 시도
@@ -131,19 +136,45 @@ class BaeminReplyPoster:
             success_count = 0
             failed_count = 0
             results = []
-            
+            total = len(reviews_to_reply)
+
+            # 먼저 현재 페이지에서 찾을 수 있는 리뷰들을 확인
+            print(f"[BAEMIN] 📋 현재 페이지 로드된 리뷰 확인 중...")
+            available_on_page = await self._get_available_reviews_on_page(self.page)
+            print(f"[BAEMIN] 📋 현재 페이지에서 {len(available_on_page)}개 리뷰 발견")
+
+            # 처리할 리뷰들을 우선순위에 따라 정렬 (현재 페이지에 있는 것을 먼저)
+            reviews_on_page = []
+            reviews_need_scroll = []
+
             for review in reviews_to_reply:
+                if review['baemin_review_id'] in available_on_page:
+                    reviews_on_page.append(review)
+                else:
+                    reviews_need_scroll.append(review)
+
+            print(f"[BAEMIN] 📋 우선 처리 (현재 페이지): {len(reviews_on_page)}개")
+            print(f"[BAEMIN] 📋 스크롤 필요: {len(reviews_need_scroll)}개")
+
+            # 현재 페이지 리뷰들 먼저 처리
+            all_reviews_ordered = reviews_on_page + reviews_need_scroll
+
+            for idx, review in enumerate(all_reviews_ordered, 1):
                 try:
-                    print(f"\n[BAEMIN] 리뷰 {review['baemin_review_id']} 처리 중...")
-                    
+                    print(f"\n{'='*60}")
+                    print(f"[BAEMIN] 📊 진행률: {idx}/{total} ({idx*100//total}%)")
+                    print(f"[BAEMIN] 🎯 리뷰 {review['baemin_review_id']} 처리 시작")
+                    print(f"[BAEMIN] 👤 작성자: {review.get('reviewer_name', 'Unknown')}")
+                    print(f"{'='*60}")
+
                     # 답글 등록
                     result = await self._post_single_reply(
-                        self.page, 
+                        self.page,
                         review['baemin_review_id'],
                         review['reply_text'],
                         review  # review 객체 전달
                     )
-                    
+
                     if result['success']:
                         success_count += 1
                         # DB 상태 업데이트
@@ -152,20 +183,27 @@ class BaeminReplyPoster:
                             'sent',
                             review['reply_text']
                         )
-                        print(f"[BAEMIN] [OK] 리뷰 {review['baemin_review_id']} 답글 등록 성공")
+                        print(f"[BAEMIN] ✅ [{idx}/{total}] 리뷰 {review['baemin_review_id']} 답글 등록 성공")
                     else:
                         failed_count += 1
                         # 금지어 실패인 경우 특별 처리
-                        if 'Forbidden word' in result.get('error', ''):
-                            print(f"[BAEMIN] [WARN] 리뷰 {review['baemin_review_id']} 금지어로 인한 실패")
+                        if 'Forbidden word' in result.get('error', '') or 'forbidden' in result.get('error', '').lower():
+                            print(f"[BAEMIN] ⚠️ [{idx}/{total}] 리뷰 {review['baemin_review_id']} 금지어로 인한 실패")
                             # failure_reason은 이미 _post_single_reply에서 DB에 저장됨
+                        elif 'not found' in result.get('error', '').lower():
+                            print(f"[BAEMIN] ❌ [{idx}/{total}] 리뷰 {review['baemin_review_id']} 리뷰를 찾을 수 없음")
                         else:
-                            print(f"[BAEMIN] [ERROR] 리뷰 {review['baemin_review_id']} 답글 등록 실패: {result.get('error')}")
-                    
+                            print(f"[BAEMIN] ❌ [{idx}/{total}] 리뷰 {review['baemin_review_id']} 답글 등록 실패: {result.get('error')}")
+
                     results.append(result)
-                    
-                    # 다음 답글 등록 전 대기
-                    await self.page.wait_for_timeout(2000)
+
+                    # 현재까지 진행 상황 요약
+                    print(f"\n[BAEMIN] 📈 현재까지: 성공 {success_count}개 / 실패 {failed_count}개")
+
+                    # 마지막 리뷰가 아니면 다음 답글 등록 전 대기
+                    if idx < total:
+                        print(f"[BAEMIN] ⏳ 다음 리뷰 처리 전 2초 대기...")
+                        await self.page.wait_for_timeout(2000)
                     
                 except Exception as e:
                     print(f"[BAEMIN] 리뷰 {review['baemin_review_id']} 처리 중 오류: {str(e)}")
@@ -329,7 +367,7 @@ class BaeminReplyPoster:
                 'reply_status', 'draft'  # AI 답글 생성됨
             ).neq(
                 'reply_text', None  # 답글 텍스트 있음
-            ).limit(limit * 2).execute()  # 스킵될 리뷰를 고려하여 더 많이 조회
+            ).limit(100).execute()  # 모든 리뷰 조회 (최대 100개)
             
             if not reviews_result.data:
                 print("[BAEMIN] 답글 등록 대기 중인 리뷰가 없습니다.")
@@ -372,20 +410,21 @@ class BaeminReplyPoster:
                         time_diff = schedulable_datetime - current_time
                         hours_remaining = time_diff.total_seconds() / 3600
                         skipped_reviews.append(review)
-                        print(f"[BAEMIN] ⏳ 리뷰 {review['baemin_review_id']}: 아직 대기 중 (예정: {schedulable_date}, {hours_remaining:.1f}시간 남음)")
+                        print(f"[BAEMIN] [WAITING] 리뷰 {review['baemin_review_id']}: 아직 대기 중 (예정: {schedulable_date}, {hours_remaining:.1f}시간 남음)")
                         
                 except Exception as e:
-                    print(f"[BAEMIN] ⚠️ 리뷰 {review['baemin_review_id']}: 날짜 파싱 오류 ({schedulable_date}) - 즉시 처리")
+                    print(f"[BAEMIN] [WARNING] 리뷰 {review['baemin_review_id']}: 날짜 파싱 오류 ({schedulable_date}) - 즉시 처리")
                     eligible_reviews.append(review)
             
             # 결과 요약 출력
             if skipped_reviews:
-                print(f"[BAEMIN] 📊 총 {len(reviews_result.data)}개 중:")
+                print(f"[BAEMIN] [INFO] 총 {len(reviews_result.data)}개 중:")
                 print(f"  - 처리 가능: {len(eligible_reviews)}개")
                 print(f"  - 대기 중: {len(skipped_reviews)}개")
             
-            # limit 적용
-            eligible_reviews = eligible_reviews[:limit]
+            # limit 적용 (0이면 제한 없음)
+            if limit > 0:
+                eligible_reviews = eligible_reviews[:limit]
             
             if eligible_reviews:
                 print(f"[BAEMIN] {len(eligible_reviews)}개의 답글 등록 가능한 리뷰 발견")
@@ -394,7 +433,7 @@ class BaeminReplyPoster:
             
             # 최종 요약 로그
             if skipped_reviews:
-                print(f"[BAEMIN] 📋 schedulable_reply_date 필터링 결과:")
+                print(f"[BAEMIN] [INFO] schedulable_reply_date 필터링 결과:")
                 print(f"    - 전체 조회: {len(reviews_result.data)}개")
                 print(f"    - 즉시 처리: {len(eligible_reviews)}개")
                 print(f"    - 예약 대기: {len(skipped_reviews)}개")
@@ -454,52 +493,62 @@ class BaeminReplyPoster:
             # 1. 해당 리뷰 찾기
             print(f"[BAEMIN] 🔍 1단계: 리뷰 {baemin_review_id} 요소 검색 시작...")
             review_element = None
+
+            # 먼저 현재 보이는 화면에서 검색
             review_number_spans = await page.query_selector_all(f'span:has-text("리뷰번호 {baemin_review_id}")')
-            print(f"[BAEMIN]    ✓ 리뷰번호 스팬 요소 {len(review_number_spans)}개 발견")
-            
-            if not review_number_spans:
-                print(f"[BAEMIN] 리뷰번호 {baemin_review_id}를 찾을 수 없습니다.")
-                
-                # 페이지 새로고침하고 다시 시도
-                await page.reload()
-                await page.wait_for_timeout(3000)
-                review_number_spans = await page.query_selector_all(f'span:has-text("리뷰번호 {baemin_review_id}")')
-                
-                if not review_number_spans:
-                    return {
-                        'success': False,
-                        'review_id': baemin_review_id,
-                        'error': 'Review not found on page'
-                    }
-            
-            # 리뷰 컨테이너 찾기
-            for span in review_number_spans:
-                # 상위 컨테이너로 이동
-                container = await span.evaluate_handle('''(element) => {
-                    let parent = element;
-                    while (parent && parent.parentElement) {
-                        parent = parent.parentElement;
-                        // 적절한 컨테이너 크기 확인 (리뷰 전체를 포함하는 요소)
-                        if (parent.offsetHeight > 100) {
-                            return parent;
+
+            if review_number_spans:
+                # 리뷰 컨테이너 찾기
+                for span in review_number_spans:
+                    # 상위 컨테이너로 이동
+                    container = await span.evaluate_handle('''(element) => {
+                        let parent = element;
+                        while (parent && parent.parentElement) {
+                            parent = parent.parentElement;
+                            // 적절한 컨테이너 크기 확인 (리뷰 전체를 포함하는 요소)
+                            if (parent.offsetHeight > 100) {
+                                return parent;
+                            }
                         }
-                    }
-                    return null;
-                }''')
-                
-                if container:
-                    review_element = container
-                    break
+                        return null;
+                    }''')
+
+                    if container:
+                        review_element = container
+                        break
+
+            # 현재 화면에서 못 찾으면 스크롤하며 검색
+            if not review_element:
+                print(f"[BAEMIN]    🔄 스크롤 검색 시작...")
+                review_element = await self._find_review_with_scroll(page, baemin_review_id)
+
+                if not review_element:
+                    # 더 강력한 스크롤 검색 시도 (페이지 새로고침 없이)
+                    print(f"[BAEMIN]    🔄 확장된 스크롤 검색 시도...")
+                    review_element = await self._find_review_with_scroll(page, baemin_review_id, max_scrolls=50)
+
+                    if not review_element:
+                        # 페이지 전체를 처음부터 다시 스크롤
+                        print(f"[BAEMIN]    🔄 전체 페이지 재스크롤...")
+                        await self._scroll_to_top(page)
+                        await page.wait_for_timeout(1000)
+                        review_element = await self._find_review_with_scroll(page, baemin_review_id, max_scrolls=100)
+
+                        if not review_element:
+                            print(f"[BAEMIN]    ❌ 스크롤 검색으로 리뷰를 찾을 수 없음")
+                            return {
+                                'success': False,
+                                'review_id': baemin_review_id,
+                                'error': 'Review not found with extensive scroll search'
+                            }
             
             if not review_element:
-                print(f"[BAEMIN]    ❌ 리뷰 컨테이너를 찾을 수 없음")
                 return {
                     'success': False,
                     'review_id': baemin_review_id,
                     'error': 'Review container not found'
                 }
             
-            print(f"[BAEMIN]    ✅ 리뷰 컨테이너 발견 완료")
             
             # 2. 특정 리뷰 컨테이너 내에서 답글 작성 버튼 찾기 ⭐ 핵심 수정
             print(f"[BAEMIN] 🔘 2단계: 리뷰 {baemin_review_id} 전용 답글 버튼 검색...")
@@ -747,12 +796,11 @@ class BaeminReplyPoster:
                 await page.wait_for_timeout(3000)  # 2초→3초로 증가
             
             # 4. 리뷰 카드 내에서 텍스트 입력 필드 찾기 ✨ 핵심 개선
-            print(f"[BAEMIN] 📝 4단계: 리뷰 카드 내 텍스트 입력 필드 검색...")
+            print(f"[BAEMIN] 📝 4단계: 텍스트 입력 필드 검색...")
             textarea = None
-            
+
             # 모달 로딩 추가 대기 (안정화)
             await page.wait_for_timeout(2000)  # 추가 2초 대기
-            print(f"[BAEMIN]    ⏳ 모달 안정화 대기 완료")
             
             # 🎯 리뷰 카드 내에서만 textarea 검색 (핵심 개선!)
             textarea_selectors = [
@@ -889,53 +937,57 @@ class BaeminReplyPoster:
             
             await page.wait_for_timeout(1000)
             
-            # 6. 등록 버튼 찾기 및 클릭 ✨ 성공한 다른 코드 방식 적용
+            # 6. 등록 버튼 찾기 및 클릭 - 최적화된 버전
             print(f"[BAEMIN] 🔘 6단계: 등록 버튼 검색...")
-            
-            # 🎯 성공한 다른 코드의 등록 버튼 선택자들 적용
-            submit_button_selectors = [
-                # 정확한 HTML 구조 기반 선택자들 (성공한 다른 코드에서)
-                'button:has(span.Button_b_pnsa_1w1nuchm p.Typography_b_pnsa_1bisyd424:has-text("등록"))',  # 정확한 중첩 구조
-                'button:has(span.Button_b_pnsa_1w1nuchm:has-text("등록"))',  # span 포함 구조
-                'button:has(p.Typography_b_pnsa_1bisyd424:has-text("등록"))',  # p 태그 직접 매칭
-                'button:has(p.c_pg5s_13c33de7.Typography_b_pnsa_1bisyd424:has-text("등록"))',  # 모든 클래스 포함
-                'button:has(span span p:has-text("등록"))',  # span > span > p 구조
-                # 기존 작동하는 선택자들 (우선순위 높게)
-                'button.Button_b_pnsa_1w1nucha[data-disabled="false"][data-loading="false"]:has-text("등록")',  # 현재 작동하는 선택자
-                'button[class*="Button_b_pnsa_1w1nucha"][data-disabled="false"]:has-text("등록")',  # 부분 매칭
-                'button[data-disabled="false"][data-loading="false"]:has-text("등록")',  # 상태 기반
-                # 백업 선택자들
-                'button[data-atelier-component="Button"]:has(p:has-text("등록"))',  # 정확한 구조
-                'button.Button_b_pnsa_1w1nucha:has(p:has-text("등록"))',  # 정확한 클래스
-                'button[data-disabled="false"]:has(p:has-text("등록"))',  # 활성화된 버튼
-                'button:has-text("등록")',
-                'button[type="button"]:has(p:has-text("등록"))',
-                'button:has-text("작성")',
-                'button:has-text("확인")',
-                # 모달 내부 등록 버튼 (백업)
-                'div[role="dialog"] button:has-text("등록")',
-                'div[class*="modal"] button:has-text("등록")',
-                'div[class*="Modal"] button:has-text("등록")'
+
+            # 가장 자주 작동하는 선택자들만 먼저 시도 (빠른 검색)
+            primary_selectors = [
+                'button:has(span span p:has-text("등록"))',  # 가장 많이 성공한 패턴
+                'button[data-disabled="false"][data-loading="false"]:has-text("등록")',
+                'button:has-text("등록")'
             ]
-            
+
             submit_button = None
-            
-            # 🔍 성공한 방식: wait_for_selector로 각 선택자 시도
-            for selector in submit_button_selectors:
+
+            # 1차: 빠른 검색 (timeout 짧게)
+            for selector in primary_selectors:
                 try:
-                    print(f"[BAEMIN]    🔍 선택자 시도: {selector[:60]}...")
-                    submit_button = await page.wait_for_selector(selector, timeout=3000, state='visible')
+                    submit_button = await page.wait_for_selector(selector, timeout=1000, state='visible')
                     if submit_button:
-                        # 버튼이 활성화되어 있는지 확인 (성공한 코드 방식)
+                        # 버튼이 활성화되어 있는지 확인
                         is_disabled = await submit_button.get_attribute('disabled')
                         if not is_disabled:
-                            print(f"[BAEMIN]    ✅ 활성화된 등록 버튼 발견!")
+                            print(f"[BAEMIN]    ✅ 등록 버튼 빠르게 발견!")
                             break
                         else:
-                            print(f"[BAEMIN]    ⚠️ 등록 버튼 발견했지만 비활성화됨")
                             submit_button = None
-                except Exception as e:
+                except:
                     continue
+
+            # 1차에서 못 찾으면 2차 상세 검색
+            if not submit_button:
+                print(f"[BAEMIN]    🔄 상세 검색 모드...")
+
+                # 추가 선택자들 (백업용)
+                backup_selectors = [
+                    'button.Button_b_pnsa_1w1nucha[data-disabled="false"]:has-text("등록")',
+                    'button[data-atelier-component="Button"]:has(p:has-text("등록"))',
+                    'button[type="button"]:has(p:has-text("등록"))',
+                    'div[role="dialog"] button:has-text("등록")'
+                ]
+
+                for selector in backup_selectors:
+                    try:
+                        submit_button = await page.wait_for_selector(selector, timeout=1500, state='visible')
+                        if submit_button:
+                            is_disabled = await submit_button.get_attribute('disabled')
+                            if not is_disabled:
+                                print(f"[BAEMIN]    ✅ 등록 버튼 발견 (백업 검색)")
+                                break
+                            else:
+                                submit_button = None
+                    except:
+                        continue
             
             if not submit_button:
                 print(f"[BAEMIN]    ❌ 등록 버튼을 찾을 수 없음")
@@ -1164,129 +1216,347 @@ class BaeminReplyPoster:
         except Exception as e:
             print(f"[BAEMIN] 상태 업데이트 실패: {str(e)}")
 
-    async def _close_popup_if_exists(self, page) -> bool:
-        """배민 팝업/다이얼로그 닫기 (baemin_review_crawler.py에서 가져온 로직)"""
+
+    async def _set_date_filter(self, page, days: int = 30):
+        """날짜 필터 설정 (크롤러와 동일한 로직)"""
         try:
-            print("🔍 배민 팝업 확인 중...")
-            
-            # 다양한 팝업 닫기 버튼 셀렉터들 (우선순위 순서로)
-            close_selectors = [
-                # 1. aria-label이 '닫기'인 버튼 (가장 정확)
-                'button[aria-label="닫기"]',
-                
-                # 2. IconButton 클래스와 닫기 아이콘을 가진 버튼
-                'button.IconButton_b_dvcv_uw474i2[aria-label="닫기"]',
-                
-                # 3. Dialog 내의 닫기 버튼들
-                'div[role="dialog"] button[aria-label="닫기"]',
-                'div.Dialog_b_dvcv_3pnjmu4 button[aria-label="닫기"]',
-                
-                # 4. OverlayHeader 내의 닫기 버튼
-                'div.OverlayHeader_b_dvcv_5xyph30 button[aria-label="닫기"]',
-                
-                # 5. X 모양 SVG가 있는 버튼들
-                'button:has(svg path[d*="20.42 4.41081"])',
-                'button:has(svg path[d*="M20.42"])',
-                
-                # 6. 일반적인 닫기 버튼 패턴들
-                'button[data-atelier-component="IconButton"][aria-label="닫기"]',
-                '[data-testid="close-button"]',
-                '[data-testid="modal-close"]',
-                '.close-button',
-                '.modal-close',
-                '.dialog-close',
-                
-                # 7. 백업 셀렉터들
-                'button:has(svg):has(path[d*="4.41081"])',  # X 아이콘 SVG
-                'div[role="dialog"] button:first-child',     # 다이얼로그의 첫 번째 버튼
-            ]
-            
-            for i, selector in enumerate(close_selectors, 1):
-                try:
-                    print(f"   시도 {i}: {selector}")
-                    
-                    # 팝업이 있는지 확인
-                    close_button = await page.query_selector(selector)
-                    
-                    if close_button:
-                        # 버튼이 보이는지 확인
-                        is_visible = await close_button.is_visible()
-                        if is_visible:
-                            # 클릭 시도
-                            await close_button.click()
-                            await page.wait_for_timeout(1000)
-                            
-                            print(f"✅ 배민 팝업 닫기 성공: {selector}")
-                            
-                            # 팝업이 실제로 사라졌는지 확인
-                            popup_gone = await page.query_selector('div[role="dialog"]')
-                            if not popup_gone:
-                                print("✅ 팝업 완전 제거 확인됨")
-                                return True
-                            else:
-                                print("⚠️ 팝업이 여전히 존재함, 다른 방법 시도")
-                        else:
-                            print(f"   버튼이 보이지 않음: {selector}")
-                    
-                except Exception as e:
-                    print(f"   셀렉터 {selector} 실패: {str(e)}")
-                    continue
-            
-            # 2차 시도: JavaScript로 강제 닫기
-            try:
-                print("🔧 JavaScript로 팝업 강제 닫기 시도...")
-                
-                await page.evaluate("""
-                    // 1. role="dialog"인 요소들 모두 제거
-                    const dialogs = document.querySelectorAll('div[role="dialog"]');
-                    dialogs.forEach(dialog => {
-                        console.log('Removing dialog:', dialog);
-                        dialog.remove();
-                    });
-                    
-                    // 2. 오버레이/백드롭 제거
-                    const overlays = document.querySelectorAll('div[class*="overlay"], div[class*="backdrop"], div[class*="modal"]');
-                    overlays.forEach(overlay => {
-                        if (overlay.style.position === 'fixed' || overlay.style.zIndex > 1000) {
-                            console.log('Removing overlay:', overlay);
-                            overlay.remove();
-                        }
-                    });
-                    
-                    // 3. body 스크롤 복원
-                    document.body.style.overflow = 'auto';
-                    
-                    console.log('JavaScript popup removal completed');
-                """)
-                
+            print(f"[BAEMIN] 📅 날짜 필터 선택 시도: 최근 {days}일")
+
+            # 1. 먼저 날짜 드롭박스 클릭 (현재 날짜 표시 영역)
+            date_dropdown = await page.query_selector("div.ReviewFilter-module__NZW0")
+            if date_dropdown:
+                await date_dropdown.click()
                 await page.wait_for_timeout(1000)
-                print("✅ JavaScript로 팝업 강제 제거 완료")
-                return True
-                
-            except Exception as e:
-                print(f"JavaScript 팝업 제거 실패: {str(e)}")
-            
-            # 3차 시도: ESC 키로 닫기
-            try:
-                print("⌨️ ESC 키로 팝업 닫기 시도...")
-                await page.keyboard.press('Escape')
-                await page.wait_for_timeout(1000)
-                
-                # 팝업이 사라졌는지 확인
-                popup_exists = await page.query_selector('div[role="dialog"]')
-                if not popup_exists:
-                    print("✅ ESC 키로 팝업 닫기 성공")
-                    return True
-                    
-            except Exception as e:
-                print(f"ESC 키 팝업 닫기 실패: {str(e)}")
-            
-            print("⚠️ 모든 팝업 닫기 시도 실패 (무시하고 계속 진행)")
-            return False
-            
+                print("[BAEMIN] ✅ 날짜 드롭박스 열기 성공")
+            else:
+                print("[BAEMIN] ⚠️ 날짜 드롭박스를 찾을 수 없음")
+                return False
+
+            # 2. 라디오 버튼 선택
+            if days >= 30:
+                # 최근 30일 선택
+                radio_30 = await page.query_selector('input[type="radio"][value="최근 30일"]')
+                if radio_30:
+                    await radio_30.click()
+                    print("[BAEMIN] ✅ 최근 30일 선택")
+                else:
+                    print("[BAEMIN] ⚠️ 최근 30일 라디오 버튼을 찾을 수 없음")
+                    return False
+            else:
+                # 최근 7일 선택
+                radio_7 = await page.query_selector('input[type="radio"][value="최근 7일"]')
+                if radio_7:
+                    await radio_7.click()
+                    print("[BAEMIN] ✅ 최근 7일 선택")
+                else:
+                    print("[BAEMIN] ⚠️ 최근 7일 라디오 버튼을 찾을 수 없음")
+                    return False
+
+            await page.wait_for_timeout(500)
+
+            # 3. 적용 버튼 클릭 (중요!)
+            apply_button = await page.query_selector('button[type="button"]:has-text("적용")')
+            if apply_button:
+                await apply_button.click()
+                print("[BAEMIN] ✅ 적용 버튼 클릭")
+                await page.wait_for_timeout(2000)
+            else:
+                print("[BAEMIN] ⚠️ 적용 버튼을 찾을 수 없음")
+                return False
+
+            print(f"[BAEMIN] ✅ 날짜 필터 적용 완료")
+            return True
+
         except Exception as e:
-            print(f"팝업 닫기 중 오류 (무시하고 계속 진행): {str(e)}")
+            print(f"[BAEMIN] ⚠️ 날짜 필터 선택 실패: {str(e)}")
             return False
+
+    async def _get_review_scroll_container(self, page):
+        """리뷰 리스트의 실제 스크롤 컨테이너를 자동 감지"""
+        try:
+            container_handle = await page.evaluate_handle('''() => {
+                // 리뷰 아이템을 기준점으로 찾기
+                const reviewSelectors = [
+                    '.ReviewContent-module__Ksg4',
+                    '[data-atelier-component="Container"]',
+                    'span',
+                    'article', 'section'
+                ];
+
+                let reviewElement = null;
+                for (const selector of reviewSelectors) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                        reviewElement = elements[0];
+                        break;
+                    }
+                }
+
+                if (!reviewElement) {
+                    // 텍스트로 리뷰 요소 찾기
+                    const allElements = document.querySelectorAll('*');
+                    for (const el of allElements) {
+                        if (el.textContent && el.textContent.includes('리뷰번호')) {
+                            reviewElement = el;
+                            break;
+                        }
+                    }
+                }
+
+                if (!reviewElement) {
+                    console.log('리뷰 요소를 찾을 수 없음');
+                    return null;
+                }
+
+                // 리뷰 요소의 상위로 올라가면서 스크롤 가능한 컨테이너 찾기
+                let current = reviewElement;
+                let scrollContainer = null;
+
+                while (current && current !== document.body) {
+                    const style = getComputedStyle(current);
+                    const overflow = style.overflow || style.overflowY;
+
+                    if ((overflow === 'auto' || overflow === 'scroll') &&
+                        current.scrollHeight > current.clientHeight) {
+                        // 스크롤 가능한 컨테이너 발견
+                        console.log('스크롤 컨테이너 발견:', {
+                            tag: current.tagName,
+                            className: current.className,
+                            scrollHeight: current.scrollHeight,
+                            clientHeight: current.clientHeight
+                        });
+                        scrollContainer = current;
+                        break;
+                    }
+                    current = current.parentElement;
+                }
+
+                // 못찾았으면 디폴트로 window 사용
+                if (!scrollContainer) {
+                    console.log('스크롤 컨테이너를 찾을 수 없음, window 사용');
+                    return window;
+                }
+
+                return scrollContainer;
+            }''');
+
+            return container_handle;
+        except Exception as e:
+            print(f"[BAEMIN] 스크롤 컨테이너 감지 오류: {str(e)}")
+            return None
+
+    async def _scroll_container_to(self, container_handle, position, behavior='smooth'):
+        """컨테이너를 특정 위치로 스크롤"""
+        try:
+            await container_handle.evaluate('''(container, options) => {
+                if (container === window) {
+                    window.scrollTo({
+                        top: options.position,
+                        behavior: options.behavior
+                    });
+                } else {
+                    container.scrollTo({
+                        top: options.position,
+                        behavior: options.behavior
+                    });
+                }
+            }''', {'position': position, 'behavior': behavior})
+        except Exception as e:
+            print(f"[BAEMIN] 스크롤 오류: {str(e)}")
+
+    async def _get_container_scroll_info(self, container_handle):
+        """컨테이너의 스크롤 정보 가져오기"""
+        try:
+            info = await container_handle.evaluate('''(container) => {
+                if (container === window) {
+                    return {
+                        scrollTop: window.pageYOffset || document.documentElement.scrollTop,
+                        scrollHeight: document.documentElement.scrollHeight,
+                        clientHeight: window.innerHeight
+                    };
+                } else {
+                    return {
+                        scrollTop: container.scrollTop,
+                        scrollHeight: container.scrollHeight,
+                        clientHeight: container.clientHeight
+                    };
+                }
+            }''')
+            return info
+        except Exception as e:
+            print(f"[BAEMIN] 스크롤 정보 오류: {str(e)}")
+            return {'scrollTop': 0, 'scrollHeight': 0, 'clientHeight': 0}
+
+    async def _get_available_reviews_on_page(self, page):
+        """현재 페이지에 로드된 모든 리뷰 ID들을 수집"""
+        try:
+            available_reviews = await page.evaluate('''() => {
+                const spans = document.querySelectorAll('span');
+                const reviewIds = [];
+
+                for (const span of spans) {
+                    const text = span.textContent || '';
+                    if (text.includes('리뷰번호')) {
+                        // "리뷰번호 12345" 형태에서 숫자 부분 추출
+                        const match = text.match(/리뷰번호\\s+(\\d+)/);
+                        if (match) {
+                            reviewIds.push(match[1]);
+                        }
+                    }
+                }
+
+                return [...new Set(reviewIds)]; // 중복 제거
+            }''')
+
+            return available_reviews
+        except Exception as e:
+            print(f"[BAEMIN] 현재 페이지 리뷰 수집 오류: {str(e)}")
+            return []
+
+    async def _scroll_to_top(self, page):
+        """페이지 맨 위로 스크롤"""
+        try:
+            # 스크롤 컨테이너 감지
+            container_handle = await self._get_review_scroll_container(page)
+            if container_handle:
+                await self._scroll_container_to(container_handle, 0, 'smooth')
+                print("[BAEMIN] 페이지 맨 위로 스크롤 완료")
+            else:
+                # 윈도우 스크롤
+                await page.evaluate('window.scrollTo({top: 0, behavior: "smooth"})')
+                print("[BAEMIN] 윈도우 맨 위로 스크롤 완료")
+        except Exception as e:
+            print(f"[BAEMIN] 맨 위로 스크롤 오류: {str(e)}")
+
+    async def _find_review_with_scroll(self, page, baemin_review_id, max_scrolls=30):
+        """스크롤하면서 특정 리뷰 ID를 찾는 함수"""
+        try:
+            print(f"\n[BAEMIN] 🔄 스크롤 검색 시작: 리뷰 {baemin_review_id}")
+
+            # 스크롤 컨테이너 찾기
+            container_handle = await self._get_review_scroll_container(page)
+            if not container_handle:
+                print("[BAEMIN] ⚠️ 스크롤 컨테이너를 찾을 수 없음")
+                return None
+
+            # 현재 위치에서 시작 (더 이상 맨 위로 이동하지 않음)
+            # await self._scroll_container_to(container_handle, 0, 'auto')
+            await page.wait_for_timeout(500)
+
+            found_review_element = None
+            scroll_count = 0
+            last_scroll_height = 0
+            no_change_count = 0
+
+            while scroll_count < max_scrolls:
+                scroll_count += 1
+
+                # 현재 페이지에서 리뷰 검색
+                print(f"[BAEMIN] 🔍 스크롤 {scroll_count}/{max_scrolls} - 리뷰 {baemin_review_id} 검색 중...")
+
+                # 더 정확한 리뷰 검색 로직
+                review_search_result = await page.evaluate('''(reviewId) => {
+                    console.log(`[SCROLL SEARCH] 리뷰 ID ${reviewId} 검색 중...`);
+
+                    // 1단계: span 요소에서 정확한 텍스트 매칭
+                    const spans = document.querySelectorAll('span');
+                    let foundSpan = null;
+
+                    for (const span of spans) {
+                        const text = span.textContent || '';
+                        if (text === '리뷰번호 ' + reviewId || text.includes('리뷰번호 ' + reviewId)) {
+                            console.log(`[SCROLL SEARCH] 리뷰번호 스팬 발견: "${text}"`);
+                            foundSpan = span;
+                            break;
+                        }
+                    }
+
+                    if (!foundSpan) {
+                        console.log(`[SCROLL SEARCH] 리뷰번호 스팬을 찾을 수 없음`);
+
+                        // 디버깅: 현재 페이지의 모든 리뷰번호 출력
+                        const allReviewNumbers = [];
+                        for (const span of spans) {
+                            const text = span.textContent || '';
+                            if (text.includes('리뷰번호')) {
+                                allReviewNumbers.push(text.trim());
+                            }
+                        }
+                        console.log(`[SCROLL SEARCH] 현재 페이지의 리뷰번호들:`, allReviewNumbers);
+                        return { found: false, currentReviews: allReviewNumbers };
+                    }
+
+                    // 2단계: 리뷰 컨테이너 찾기
+                    let container = foundSpan;
+                    while (container && container.parentElement) {
+                        container = container.parentElement;
+                        if (container.offsetHeight > 100) {
+                            console.log(`[SCROLL SEARCH] 리뷰 컨테이너 발견`);
+                            // 뷰포트로 스크롤
+                            container.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'center'
+                            });
+                            return { found: true, reviewId: reviewId };
+                        }
+                    }
+
+                    console.log(`[SCROLL SEARCH] 리뷰 컨테이너를 찾을 수 없음`);
+                    return { found: false, reviewId: reviewId };
+                }''', baemin_review_id)
+
+                if review_search_result.get('found'):
+                    print(f"[BAEMIN] ✅ 리뷰 {baemin_review_id} 발견! 뷰포트에 위치시킴")
+                    await page.wait_for_timeout(1500)  # 스크롤 안정화 대기
+
+                    # 리뷰 요소 가져오기
+                    review_spans = await page.query_selector_all(f'span:has-text("리뷰번호 {baemin_review_id}")')
+                    if review_spans:
+                        # 컨테이너 찾기
+                        for span in review_spans:
+                            container = await span.evaluate_handle('''(element) => {
+                                let parent = element;
+                                while (parent && parent.parentElement) {
+                                    parent = parent.parentElement;
+                                    if (parent.offsetHeight > 100) {
+                                        return parent;
+                                    }
+                                }
+                                return null;
+                            }''')
+
+                            if container:
+                                found_review_element = container
+                                break
+
+                    if found_review_element:
+                        return found_review_element
+
+                # 스크롤 정보 가져오기
+                scroll_info = await self._get_container_scroll_info(container_handle)
+                current_height = scroll_info['scrollHeight']
+
+                # 더 이상 스크롤할 곳이 없는지 확인
+                if current_height == last_scroll_height:
+                    no_change_count += 1
+                    if no_change_count >= 3:
+                        print(f"[BAEMIN] ⚠️ 더 이상 스크롤할 콘텐츠가 없음")
+                        break
+                else:
+                    no_change_count = 0
+                    last_scroll_height = current_height
+
+                # 다음 위치로 스크롤 (더 작은 단위로)
+                new_position = scroll_info['scrollTop'] + scroll_info['clientHeight'] * 0.5
+                await self._scroll_container_to(container_handle, new_position)
+                await page.wait_for_timeout(800)  # DOM 업데이트 대기 (더 빠르게)
+
+            print(f"[BAEMIN] ❌ 리뷰 {baemin_review_id}를 찾을 수 없음 (스크롤 {scroll_count}회 시도)")
+            return None
+
+        except Exception as e:
+            print(f"[BAEMIN] 스크롤 검색 중 오류: {str(e)}")
+            return None
 
 
 async def main():

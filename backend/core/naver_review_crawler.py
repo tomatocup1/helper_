@@ -290,9 +290,37 @@ class NaverReviewCrawler:
             # 리뷰 목록 로드 대기
             await page.wait_for_timeout(3000)
             
-            # 리뷰 아이템 선택자
-            review_selector = "li.pui__X35jYm.Review_pui_review__zhZdn"
-            await page.wait_for_selector(review_selector, timeout=10000)
+            # 리뷰 아이템 선택자 (여러 후보 시도)
+            review_selectors = [
+                "li.pui__X35jYm.Review_pui_review__zhZdn",  # 기존 선택자
+                "li[class*='Review_pui_review']",  # 부분 매칭
+                "li[class*='pui_review']",  # 더 포괄적
+                ".review-item",  # 일반적인 클래스
+                "li[class*='Review']",  # 매우 포괄적
+                "li"  # 최후의 수단
+            ]
+
+            review_selector = None
+            print("리뷰 선택자 확인 중...")
+
+            for selector in review_selectors:
+                try:
+                    await page.wait_for_selector(selector, timeout=3000)
+                    elements = await page.query_selector_all(selector)
+                    if elements:
+                        review_selector = selector
+                        print(f"✅ 리뷰 선택자 발견: {selector} ({len(elements)}개 요소)")
+                        break
+                except:
+                    print(f"❌ 선택자 시도 실패: {selector}")
+                    continue
+
+            if not review_selector:
+                print("⚠️ 리뷰 선택자를 찾을 수 없음 - 페이지 HTML 확인 필요")
+                # 페이지 HTML 일부 출력 (디버깅용)
+                page_content = await page.content()
+                print(f"페이지 콘텐츠 일부: {page_content[:500]}")
+                return []
             
             # 무한 스크롤로 모든 리뷰 로드
             max_scroll_attempts = 30  # 최대 30번까지 스크롤
@@ -524,36 +552,122 @@ class NaverReviewCrawler:
         """리뷰 내용 추출 (더보기 처리 포함)"""
         try:
             content_info = {}
-            
-            # 리뷰 텍스트 영역 찾기
-            text_container = await review_element.query_selector(".pui__vn15t2")
+
+            print("🔍 리뷰 텍스트 추출 시작...")
+
+            # 여러 선택자 시도
+            text_selectors = [
+                ".pui__vn15t2",  # 기존 선택자
+                "[class*='vn15t2']",  # 부분 매칭
+                "[class*='review'][class*='text']",  # 포괄적
+                "div[class*='text']",  # 더 포괄적
+                "a.pui__xtsQN-[data-pui-click-code='text']",  # 직접 텍스트 링크
+                "a[class*='xtsQN']",  # 부분 매칭
+                "div p", "div span",  # 일반적인 텍스트 요소
+            ]
+
+            text_container = None
+            found_selector = None
+
+            for selector in text_selectors:
+                try:
+                    text_container = await review_element.query_selector(selector)
+                    if text_container:
+                        found_selector = selector
+                        print(f"✅ 텍스트 컨테이너 발견: {selector}")
+                        break
+                except:
+                    continue
+
             if not text_container:
-                # 사진만 있는 리뷰의 경우 다른 선택자 시도
-                text_link = await review_element.query_selector("a.pui__xtsQN-[data-pui-click-code='text']")
-                if text_link:
-                    content_info['review_text'] = await text_link.text_content()
+                print("❌ 텍스트 컨테이너를 찾을 수 없음")
+                # 리뷰 요소의 전체 텍스트 내용 확인
+                full_text = await review_element.text_content()
+                print(f"리뷰 요소 전체 텍스트: {full_text[:200]}...")
                 return content_info
-            
+
             # 더보기 버튼 확인 및 클릭
-            more_button = await text_container.query_selector("a.pui__wFzIYl[aria-expanded='false']")
-            if more_button:
-                print("더보기 버튼 발견 - 클릭 중...")
-                await more_button.click()
-                await page.wait_for_timeout(1000)
-            
-            # 전체 텍스트 추출
-            text_element = await text_container.query_selector("a.pui__xtsQN-")
-            if text_element:
-                review_text = await text_element.text_content()
+            more_button_selectors = [
+                "a.pui__wFzIYl[aria-expanded='false']",  # 기존
+                "a[aria-expanded='false']",  # 포괄적
+                "button[class*='more']",  # 일반적
+                "a[class*='more']"
+            ]
+
+            for more_selector in more_button_selectors:
+                try:
+                    more_button = await text_container.query_selector(more_selector)
+                    if more_button:
+                        print(f"더보기 버튼 발견: {more_selector} - 클릭 중...")
+                        await more_button.click()
+                        await page.wait_for_timeout(1000)
+                        break
+                except:
+                    continue
+
+            # 텍스트 추출 - 여러 방법 시도
+            review_text = ""
+
+            # 1차: 직접 텍스트 링크에서 추출
+            text_link_selectors = [
+                "a.pui__xtsQN-",  # 기존
+                "a[class*='xtsQN']",  # 부분 매칭
+                "a[data-pui-click-code='text']",  # 데이터 속성
+            ]
+
+            for link_selector in text_link_selectors:
+                try:
+                    text_element = await text_container.query_selector(link_selector)
+                    if text_element:
+                        review_text = await text_element.text_content()
+                        if review_text and review_text.strip():
+                            print(f"✅ 텍스트 추출 성공 (링크): {link_selector}")
+                            print(f"   텍스트: {review_text[:100]}...")
+                            break
+                except:
+                    continue
+
+            # 2차: 컨테이너에서 직접 추출
+            if not review_text or not review_text.strip():
+                try:
+                    review_text = await text_container.text_content()
+                    if review_text and review_text.strip():
+                        print(f"✅ 텍스트 추출 성공 (컨테이너 직접)")
+                        print(f"   텍스트: {review_text[:100]}...")
+                except:
+                    pass
+
+            # 3차: 일반적인 텍스트 요소에서 추출
+            if not review_text or not review_text.strip():
+                generic_selectors = ["p", "span", "div"]
+                for gen_selector in generic_selectors:
+                    try:
+                        text_elements = await text_container.query_selector_all(gen_selector)
+                        for element in text_elements:
+                            element_text = await element.text_content()
+                            if element_text and len(element_text.strip()) > 10:  # 10자 이상
+                                review_text = element_text
+                                print(f"✅ 텍스트 추출 성공 (일반): {gen_selector}")
+                                print(f"   텍스트: {review_text[:100]}...")
+                                break
+                        if review_text and review_text.strip():
+                            break
+                    except:
+                        continue
+
+            if review_text and review_text.strip():
                 content_info['review_text'] = review_text.strip()
-            
+                print(f"✅ 최종 텍스트 저장: {len(review_text)} 글자")
+            else:
+                print("❌ 리뷰 텍스트 추출 실패")
+
             # 평점 추출 (별점)
             rating = await self._extract_rating(review_element)
             if rating:
                 content_info['rating'] = rating
-            
+
             return content_info
-            
+
         except Exception as e:
             print(f"리뷰 내용 추출 중 오류: {str(e)}")
             return {}
@@ -598,15 +712,32 @@ class NaverReviewCrawler:
                 await more_keywords_button.click()
                 await page.wait_for_timeout(1000)
             
-            # 모든 키워드 추출
+            # 모든 키워드 추출 (이모지 + 텍스트 구조 처리)
             keyword_elements = await keyword_container.query_selector_all("span.pui__jhpEyP:not(.pui__ggzZJ8)")
-            for keyword_element in keyword_elements:
-                keyword_text = await keyword_element.text_content()
-                if keyword_text and keyword_text.strip():
-                    # 이모지 제거하고 텍스트만 추출
-                    clean_keyword = keyword_text.strip()
-                    if clean_keyword and not clean_keyword.startswith('+'):
-                        keywords.append(clean_keyword)
+            print(f"키워드 요소 개수: {len(keyword_elements)}")
+
+            for i, keyword_element in enumerate(keyword_elements):
+                try:
+                    # 전체 텍스트 추출 (이모지 alt 텍스트 + 실제 텍스트)
+                    keyword_text = await keyword_element.text_content()
+                    print(f"키워드 {i+1} 원본 텍스트: '{keyword_text}'")
+
+                    if keyword_text and keyword_text.strip():
+                        # 텍스트 정리 (이모지는 이미 text_content()에서 제외됨)
+                        clean_keyword = keyword_text.strip()
+
+                        # 더보기 버튼("+숫자개 더보기") 제외
+                        if clean_keyword and not clean_keyword.startswith('+') and '더보기' not in clean_keyword:
+                            keywords.append(clean_keyword)
+                            print(f"✅ 키워드 추가: '{clean_keyword}'")
+                        else:
+                            print(f"❌ 키워드 제외: '{clean_keyword}'")
+                    else:
+                        print(f"❌ 빈 키워드 텍스트")
+
+                except Exception as e:
+                    print(f"키워드 요소 {i+1} 처리 중 오류: {e}")
+                    continue
             
             return keywords
             

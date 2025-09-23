@@ -230,12 +230,36 @@ class CoupangReplyPoster:
                         if review_id in self.processed_reviews:
                             logger.warning(f"⚠️ 이미 처리된 리뷰 스킵: {review_id}")
                             continue
-                        
+
                         # 현재 리뷰 처리 시작 표시
                         self.processed_reviews.add(review_id)
                         logger.info(f"🔄 리뷰 처리 시작: {review_id} (총 처리 중: {len(self.processed_reviews)}개)")
-                        
-                        result = await self._post_single_reply(page, review, test_mode)
+
+                        # 재시도 로직 추가 (최대 3회 시도)
+                        max_retries = 3
+                        result = None
+
+                        for attempt in range(max_retries):
+                            if attempt > 0:
+                                logger.info(f"🔁 재시도 {attempt}/{max_retries-1}: {review_id}")
+                                await page.wait_for_timeout(2000 * attempt)  # 점진적 대기
+
+                            result = await self._post_single_reply(page, review, test_mode)
+
+                            # 성공 또는 금지어로 인한 실패(재시도 불필요)인 경우 중단
+                            if result:
+                                if result.get('success', True) and result.get('status') != 'failed':
+                                    # 성공
+                                    break
+                                elif 'forbidden word' in result.get('error', '').lower():
+                                    # 금지어는 재시도해도 소용없음
+                                    logger.warning(f"금지어로 인한 실패 - 재시도 중단: {review_id}")
+                                    break
+
+                            # 마지막 시도가 아니면 재시도
+                            if attempt < max_retries - 1:
+                                logger.info(f"재시도 준비 중: {review_id}")
+
                         if result and result.get('success', True) and result.get('status') != 'failed':
                             posted_replies.append(result)
                             logger.info(f"✅ 리뷰 처리 완료: {review_id}")
@@ -246,7 +270,7 @@ class CoupangReplyPoster:
                                 logger.warning(f"❌ 리뷰 처리 실패: {review_id} - {failure_reason}")
                             else:
                                 logger.warning(f"❌ 리뷰 처리 실패: {review_id} - 결과 없음")
-                            
+
                     except Exception as e:
                         logger.error(f"답글 포스팅 실패: {review['coupangeats_review_id']} - {e}")
                         continue
@@ -518,10 +542,20 @@ class CoupangReplyPoster:
             await textarea.fill(reply_text)
             await page.wait_for_timeout(500)
             
-            # 등록 버튼 클릭 - 여러 셀렉터로 시도
+            # 등록 버튼 클릭 - 여러 셀렉터로 시도 (우선순위 순서)
             submit_selectors = [
-                'span:has-text("등록")',
+                # 가장 정확한 셀렉터 (사용자 제공 HTML 기반)
+                'button.button--primaryContained span.button__inner:has-text("등록")',
+                'button.button.button-size--small.button--primaryContained:has-text("등록")',
+                'button[type="button"].button--primaryContained:has-text("등록")',
+
+                # form 내부의 등록 버튼 (더 구체적)
+                'form button:has-text("등록"):not(:has-text("취소"))',
+                'div.css-uvdxep button:has-text("등록")',
+
+                # 기존 셀렉터들 (폴백)
                 'button:has-text("등록")',
+                'span:has-text("등록")',
                 'div:has-text("등록")',
                 '[data-testid*="submit"]',
                 '[data-testid*="confirm"]'
@@ -532,17 +566,40 @@ class CoupangReplyPoster:
                 try:
                     submit_button = await page.query_selector(selector)
                     if submit_button:
-                        # 클릭 가능한 부모 요소 찾기
-                        if selector.startswith('span'):
-                            submit_button_parent = await submit_button.query_selector('xpath=..')
-                            if submit_button_parent:
-                                await submit_button_parent.click()
-                            else:
-                                await submit_button.click()
-                        else:
-                            await submit_button.click()
+                        # 버튼이 실제로 클릭 가능한지 확인
+                        is_visible = await submit_button.is_visible()
+                        is_enabled = await submit_button.is_enabled()
 
-                        logger.info(f"쿠팡이츠 등록 버튼 클릭 완료 ({selector}): {review_id}")
+                        if not is_visible or not is_enabled:
+                            logger.debug(f"버튼 비활성 상태: {selector} (visible={is_visible}, enabled={is_enabled})")
+                            continue
+
+                        # 클릭 가능한 요소 찾기
+                        if 'span' in selector or selector.startswith('span'):
+                            # span이 포함된 경우, 부모 button 찾기
+                            parent_button = await page.evaluate('''
+                                (element) => {
+                                    let current = element;
+                                    while (current && current.tagName !== 'BUTTON') {
+                                        current = current.parentElement;
+                                    }
+                                    return current;
+                                }
+                            ''', submit_button)
+
+                            if parent_button:
+                                # JavaScript로 직접 클릭 시도
+                                await page.evaluate('button => button.click()', parent_button)
+                                logger.info(f"쿠팡이츠 등록 버튼 클릭 완료 (부모 button): {review_id}")
+                            else:
+                                # 부모를 못찾으면 원래 요소 클릭
+                                await submit_button.click()
+                                logger.info(f"쿠팡이츠 등록 버튼 클릭 완료 (원본): {review_id}")
+                        else:
+                            # 일반 button인 경우 직접 클릭
+                            await submit_button.click()
+                            logger.info(f"쿠팡이츠 등록 버튼 클릭 완료 ({selector}): {review_id}")
+
                         submit_clicked = True
                         break
                 except Exception as e:
@@ -551,10 +608,77 @@ class CoupangReplyPoster:
 
             if not submit_clicked:
                 logger.error(f"등록 버튼을 찾을 수 없습니다: {review_id}")
+                # 실패 상태 업데이트 추가
+                await self._update_reply_status(
+                    review['id'],
+                    'failed',
+                    error_message=f"등록 버튼 클릭 실패 - 버튼을 찾을 수 없음"
+                )
                 return None
 
-            # 등록 처리 대기 (금지어 팝업 체크를 위해)
-            await page.wait_for_timeout(3000)  # 2초에서 3초로 증가
+            # 등록 버튼 클릭 후 DOM 변화 검증 추가
+            logger.info(f"등록 버튼 클릭 완료, DOM 변화 확인 중...")
+
+            # 먼저 form이 사라지기를 기다림 (최대 5초)
+            form_disappeared = False
+            for i in range(10):  # 0.5초 간격으로 10번 체크 (5초)
+                await page.wait_for_timeout(500)
+
+                # 현재 페이지에서 form 찾기
+                form_element = await review_element.query_selector('form')
+                if not form_element:
+                    # form이 사라졌으면 성공
+                    form_disappeared = True
+                    logger.info(f"✅ Form이 사라짐 - 답글 등록 진행 확인 ({(i+1)*0.5}초)")
+                    break
+
+                # textarea가 여전히 있는지 확인
+                textarea_still_exists = await page.query_selector('textarea[name="review"]')
+                if not textarea_still_exists:
+                    # textarea가 사라졌으면 성공 가능성 높음
+                    form_disappeared = True
+                    logger.info(f"✅ Textarea가 사라짐 - 답글 등록 진행 확인 ({(i+1)*0.5}초)")
+                    break
+
+            if not form_disappeared:
+                # form이 여전히 있으면 클릭이 실제로 실행되지 않았음
+                logger.error(f"❌ 등록 버튼 클릭 후에도 form이 사라지지 않음 - 실제 클릭 실패")
+
+                # 한 번 더 시도
+                logger.info("🔄 등록 버튼 재시도...")
+                retry_success = False
+
+                for selector in submit_selectors:
+                    try:
+                        submit_button = await page.query_selector(selector)
+                        if submit_button:
+                            # 버튼이 실제로 클릭 가능한지 확인
+                            is_visible = await submit_button.is_visible()
+                            is_enabled = await submit_button.is_enabled()
+
+                            if is_visible and is_enabled:
+                                # JavaScript로 직접 클릭 시도
+                                await page.evaluate('button => button.click()', submit_button)
+                                logger.info(f"🔄 JavaScript로 등록 버튼 재클릭 시도: {selector}")
+                                retry_success = True
+                                break
+                    except:
+                        continue
+
+                if not retry_success:
+                    logger.error(f"❌ 등록 버튼 재시도도 실패: {review_id}")
+                    await self._update_reply_status(
+                        review['id'],
+                        'failed',
+                        error_message="등록 버튼 클릭 실패 - DOM 변화 없음"
+                    )
+                    return None
+
+                # 재시도 후 다시 대기
+                await page.wait_for_timeout(2000)
+
+            # 추가 대기 (금지어 팝업 체크를 위해)
+            await page.wait_for_timeout(1000)
 
             # 쿠팡이츠 금지어 팝업 체크
             logger.info(f"🔍 쿠팡이츠 금지어 팝업 확인 중...")
@@ -662,16 +786,55 @@ class CoupangReplyPoster:
                         "detected_word": detected_forbidden_word
                     }
 
-            # 금지어 팝업이 없으면 성공 처리
-            logger.info(f"✅ 쿠팡이츠 금지어 팝업 없음 - 등록 성공 검증 중...")
+            # 금지어 팝업이 없으면 최종 DOM 확인
+            logger.info(f"✅ 쿠팡이츠 금지어 팝업 없음 - 최종 등록 확인 중...")
 
-            # 답글 등록 완료 - 검증 과정 제거 (작성한 그대로 무조건 등록됨)
+            # 답글이 실제로 등록되었는지 최종 확인
+            # 1. 수정/삭제 버튼이 나타났는지 확인
+            final_check_success = False
+
+            # 페이지 새로고침하여 확실히 확인
+            logger.info("📱 최종 확인을 위해 페이지 새로고침...")
+            await page.reload()
+            await page.wait_for_timeout(3000)
+
+            # 다시 리뷰 찾기
+            review_element_after = await self._find_review_element_in_current_page(page, review)
+            if review_element_after:
+                # 수정 버튼 확인
+                edit_button_check = await review_element_after.query_selector('button:has-text("수정")')
+                delete_button_check = await review_element_after.query_selector('button:has-text("삭제")')
+
+                # 또는 사장님 답글 div 확인
+                owner_reply_div = await review_element_after.query_selector('div.css-c2cuzz.e1d0d30o6')
+
+                if edit_button_check or delete_button_check or owner_reply_div:
+                    final_check_success = True
+                    logger.info(f"✅ 최종 확인 성공: 답글이 실제로 등록됨")
+                    if edit_button_check:
+                        logger.info(f"  - 수정 버튼 확인됨")
+                    if delete_button_check:
+                        logger.info(f"  - 삭제 버튼 확인됨")
+                    if owner_reply_div:
+                        logger.info(f"  - 사장님 답글 영역 확인됨")
+
+            if not final_check_success:
+                # 최종 확인 실패
+                logger.error(f"❌ 최종 확인 실패: 답글이 실제로 등록되지 않음")
+                await self._update_reply_status(
+                    review['id'],
+                    'failed',
+                    error_message="답글 등록 실패 - 최종 DOM 확인 실패"
+                )
+                return None
+
+            # 성공적으로 등록됨
             await self._update_reply_status(
                 review['id'],
                 'sent',
                 reply_text
             )
-            logger.info(f"✅ 답글 등록 완료: {reviewer_name}")
+            logger.info(f"✅ 답글 등록 완료 확인: {reviewer_name}")
 
             logger.info(f"답글 등록 완료: {reviewer_name}")
 

@@ -76,7 +76,7 @@ except ImportError:
 
 class YogiyoReplyPoster:
     """요기요 리뷰 답글 자동 등록 시스템"""
-    
+
     def __init__(self):
         """초기화"""
         self.supabase = supabase
@@ -84,14 +84,14 @@ class YogiyoReplyPoster:
         self.page: Optional[Page] = None
         self.logged_in = False
         self.current_store_info: Optional[Dict] = None
-        
+
         # 요기요 URL 설정
         self.login_url = "https://ceo.yogiyo.co.kr/login"
         self.reviews_url = "https://ceo.yogiyo.co.kr/reviews"
-        
+
         # DSID 생성기
         self.dsid_generator = YogiyoDSIDGenerator()
-        
+
         # 통계
         self.stats = {
             'total_reviews': 0,
@@ -102,6 +102,251 @@ class YogiyoReplyPoster:
         }
         
         logger.info("YogiyoReplyPoster 초기화 완료")
+
+    def calculate_text_similarity(self, text1: str, text2: str) -> float:
+        """텍스트 유사도 계산 (Jaccard 유사도 기반)"""
+        try:
+            if not text1 or not text2:
+                return 0.0
+
+            # 텍스트 정규화
+            text1 = text1.strip().lower()
+            text2 = text2.strip().lower()
+
+            if text1 == text2:
+                return 1.0
+
+            # 단어 단위로 분리
+            words1 = set(text1.split())
+            words2 = set(text2.split())
+
+            # Jaccard 유사도 계산
+            intersection = len(words1.intersection(words2))
+            union = len(words1.union(words2))
+
+            if union == 0:
+                return 0.0
+
+            return intersection / union
+
+        except Exception as e:
+            logger.warning(f"텍스트 유사도 계산 오류: {e}")
+            return 0.0
+
+    async def check_existing_reply(self, review_element) -> bool:
+        """리뷰 요소에 이미 답글이 있는지 확인"""
+        try:
+            logger.info("🔍 답글 존재 여부 확인 중...")
+
+            # 답글 영역 확인 (더 정확한 선택자 사용)
+            reply_selectors = [
+                '.ReviewReply__Container-sc-1536a88-0',  # 실제 답글 컨테이너
+                '.ReviewReply__ContentContainer-sc-1536a88-1',  # 답글 내용 컨테이너
+                '[class*="ReviewReply__Container"]',
+                '[class*="ReviewReply__Content"]',
+                '.owner-reply'
+            ]
+
+            for i, selector in enumerate(reply_selectors, 1):
+                try:
+                    reply_element = await review_element.query_selector(selector)
+                    if reply_element:
+                        reply_text = await reply_element.text_content()
+                        reply_text = reply_text.strip() if reply_text else ""
+
+                        logger.info(f"   - 선택자 {i} ({selector}): 발견됨")
+                        logger.info(f"   - 답글 내용: '{reply_text[:50]}...'")
+
+                        # 답글 내용이 실제로 있는지 확인 (공백이나 버튼 텍스트 제외)
+                        if reply_text and len(reply_text) > 10:
+                            # 버튼 텍스트나 시스템 메시지가 아닌 실제 답글인지 확인
+                            exclude_keywords = ['댓글쓰기', '등록', '취소', '답글을 작성해주세요', '사장님 댓글']
+                            is_actual_reply = not any(keyword in reply_text for keyword in exclude_keywords)
+
+                            if is_actual_reply:
+                                logger.info(f"✅ 실제 답글 발견: {reply_text[:30]}...")
+                                return True
+                            else:
+                                logger.info(f"❌ 시스템 텍스트로 판정: {reply_text}")
+                        else:
+                            logger.info(f"❌ 답글 내용 길이 부족: {len(reply_text)}자")
+                    else:
+                        logger.info(f"   - 선택자 {i} ({selector}): 없음")
+                except Exception as e:
+                    logger.warning(f"선택자 {selector} 확인 중 오류: {e}")
+                    continue
+
+            logger.info("✅ 답글 없음 - 새 답글 작성 가능")
+            return False
+
+        except Exception as e:
+            logger.warning(f"답글 존재 확인 중 오류: {e}")
+            return False
+
+    async def post_reply_to_element(self, review_element, reply_text: str, review_data: Dict) -> Dict[str, Any]:
+        """특정 리뷰 요소에 답글 등록"""
+        try:
+            review_id = review_data.get('id')
+            reviewer_name = review_data.get('reviewer_name', 'unknown')
+
+            logger.info(f"📝 답글 등록 시작: {reviewer_name}")
+
+            # 답글 버튼 클릭
+            reply_button_selectors = [
+                'button.ReviewReply__AddReplyButton-sc-1536a88-10:has-text("댓글쓰기")',
+                'button:has-text("댓글쓰기")',
+                'button.ReviewReply__AddReplyButton-sc-1536a88-10',
+                'button[class*="AddReplyButton"]'
+            ]
+
+            reply_button = None
+            for selector in reply_button_selectors:
+                try:
+                    reply_button = await review_element.query_selector(selector)
+                    if reply_button:
+                        logger.info(f"답글 버튼 발견: {selector}")
+                        await reply_button.click()
+                        await asyncio.sleep(2)  # 입력창 로드 대기
+                        break
+                except Exception:
+                    continue
+
+            if not reply_button:
+                logger.error("답글 버튼을 찾을 수 없음")
+                return {
+                    "success": False,
+                    "error": "답글 버튼을 찾을 수 없음",
+                    "review_id": review_id
+                }
+
+            # 답글 입력창 찾기
+            input_selectors = [
+                'textarea.ReviewReply__CustomTextarea-sc-1536a88-5',
+                'textarea[class*="CustomTextarea"]',
+                'textarea.reply-input',
+                'textarea'
+            ]
+
+            input_element = None
+            for selector in input_selectors:
+                try:
+                    input_element = await self.page.query_selector(selector)
+                    if input_element:
+                        logger.info(f"답글 입력창 발견: {selector}")
+                        break
+                except Exception:
+                    continue
+
+            if not input_element:
+                logger.error("답글 입력창을 찾을 수 없음")
+                return {
+                    "success": False,
+                    "error": "답글 입력창을 찾을 수 없음",
+                    "review_id": review_id
+                }
+
+            # 답글 텍스트 입력
+            await input_element.fill('')  # Clear by filling with empty string
+            await input_element.fill(reply_text)
+            await asyncio.sleep(1)
+            logger.info(f"답글 입력 완료: {reply_text[:50]}...")
+
+            # 등록 버튼 클릭
+            submit_selectors = [
+                'div.ReviewReply__ActionButtonWrapper-sc-1536a88-8 button:has-text("등록")',
+                'button:has-text("등록")',
+                'button[class*="SubmitButton"]'
+            ]
+
+            submit_button = None
+            for selector in submit_selectors:
+                try:
+                    submit_button = await self.page.query_selector(selector)
+                    if submit_button:
+                        logger.info(f"등록 버튼 발견: {selector}")
+                        break
+                except Exception:
+                    continue
+
+            if not submit_button:
+                logger.error("등록 버튼을 찾을 수 없음")
+                return {
+                    "success": False,
+                    "error": "등록 버튼을 찾을 수 없음",
+                    "review_id": review_id
+                }
+
+            await submit_button.click()
+            await asyncio.sleep(2)
+            logger.info("답글 등록 버튼 클릭 완료")
+
+            # 금지어 팝업 확인
+            await asyncio.sleep(2)
+            logger.info("[YOGIYO] 🔍 금지어 팝업 확인 중...")
+
+            forbidden_popup = None
+            forbidden_selectors = [
+                '.Modal__Container-sc-1wzwpns-0',
+                '[class*="Modal"]',
+                '.popup',
+                '[role="dialog"]'
+            ]
+
+            for selector in forbidden_selectors:
+                try:
+                    forbidden_popup = await self.page.query_selector(selector)
+                    if forbidden_popup:
+                        popup_text = await forbidden_popup.text_content()
+                        if popup_text and any(word in popup_text for word in ['금지', '정책', '작성할 수 없']):
+                            logger.info(f"[YOGIYO] 금지어 팝업 감지: {selector}")
+                            break
+                except:
+                    continue
+
+            if forbidden_popup:
+                logger.warning("[YOGIYO] ⚠️ 요기요 금지어 팝업 감지!")
+                popup_text = await forbidden_popup.text_content()
+                logger.warning(f"[YOGIYO] 팝업 내용: {popup_text[:100]}...")
+
+                # 팝업 닫기
+                close_button = await forbidden_popup.query_selector('button')
+                if close_button:
+                    await close_button.click()
+
+                return {
+                    "success": False,
+                    "error": f"금지어 감지: {popup_text[:100]}",
+                    "review_id": review_id
+                }
+            else:
+                logger.info("[YOGIYO] ✅ 요기요 금지어 팝업 없음 - 정상 처리")
+
+            # 답글 등록 성공 확인
+            await asyncio.sleep(3)
+
+            # DB 상태 업데이트
+            self.supabase.table('reviews_yogiyo') \
+                .update({
+                    'reply_status': 'sent',
+                    'reply_posted_at': datetime.now().isoformat()
+                }) \
+                .eq('id', review_id) \
+                .execute()
+
+            logger.info(f"✅ 답글 등록 성공: {reviewer_name}")
+            return {
+                "success": True,
+                "status": "답글 등록 성공",
+                "review_id": review_id
+            }
+
+        except Exception as e:
+            logger.error(f"post_reply_to_element 오류: {e}")
+            return {
+                "success": False,
+                "error": f"답글 등록 중 오류: {str(e)}",
+                "review_id": review_data.get('id')
+            }
     
     async def run(
         self,
@@ -266,10 +511,18 @@ class YogiyoReplyPoster:
     async def _get_pending_reviews(self, platform_store_uuid: str, limit: int) -> List[Dict]:
         """답글 대기 리뷰 조회 (schedulable_reply_date 필터링 포함)"""
         try:
-            logger.info("답글 대기 상태 리뷰 검색 중...")
+            logger.info(f"🔍 답글 대기 상태 리뷰 검색 중... (Store UUID: {platform_store_uuid})")
+
+            # 쿼리 조건 로깅
+            logger.info("📊 데이터베이스 쿼리 조건:")
+            logger.info(f"   - 테이블: reviews_yogiyo")
+            logger.info(f"   - platform_store_id = {platform_store_uuid}")
+            logger.info(f"   - reply_status = 'draft'")
+            logger.info(f"   - reply_text IS NOT NULL")
+            logger.info(f"   - limit = {limit * 2 if limit else 'unlimited'}")
 
             # draft 상태의 답글 조회 (매칭을 위해 더 많은 필드 포함)
-            result = self.supabase.table('reviews_yogiyo').select(
+            query = self.supabase.table('reviews_yogiyo').select(
                 'id, yogiyo_dsid, reviewer_name, review_text, reply_text, reply_status, platform_store_id, review_date, overall_rating, schedulable_reply_date'
             ).eq(
                 'platform_store_id', platform_store_uuid
@@ -277,34 +530,53 @@ class YogiyoReplyPoster:
                 'reply_status', 'draft'  # draft 상태의 리뷰
             ).neq(
                 'reply_text', 'null'  # 답글이 생성되어 있는 리뷰 (포스팅 대기 상태)
-            ).limit(limit * 2).execute()  # schedulable_reply_date 필터링을 위해 더 많이 조회
+            )
+
+            if limit:
+                query = query.limit(limit * 2)  # schedulable_reply_date 필터링을 위해 더 많이 조회
+
+            result = query.execute()
             
             if result.data:
-                logger.info(f"답글 대기 리뷰 {len(result.data)}개 발견")
+                logger.info(f"📝 초기 조회 결과: {len(result.data)}개 답글 대기 리뷰 발견")
+
+                # 각 리뷰의 상태 로깅
+                for i, review in enumerate(result.data, 1):
+                    logger.info(f"   {i}. ID:{review.get('id', 'N/A')} | 리뷰어:{review.get('reviewer_name', 'N/A')} | 답글:{len(review.get('reply_text', ''))}자 | 스케줄:{review.get('schedulable_reply_date', 'None')}")
 
                 # schedulable_reply_date 필터링
                 current_time = datetime.now()
+                logger.info(f"⏰ 현재 시간: {current_time}")
                 filtered_reviews = []
 
                 for review in result.data:
                     schedulable_date = review.get('schedulable_reply_date')
                     review_id = review.get('id', 'unknown')
+                    reviewer_name = review.get('reviewer_name', 'unknown')
+
+                    logger.info(f"🔍 리뷰 검사 중: {review_id} ({reviewer_name})")
+                    logger.info(f"   - schedulable_reply_date: {schedulable_date} (타입: {type(schedulable_date)})")
 
                     if schedulable_date:
                         try:
                             # ISO 포맷 파싱 및 시간대 처리
                             if isinstance(schedulable_date, str):
+                                logger.info(f"   - 문자열 형식 스케줄 시간 파싱 중...")
                                 # UTC 시간으로 파싱
                                 scheduled_time = datetime.fromisoformat(schedulable_date.replace('Z', '+00:00'))
+                                logger.info(f"   - UTC 파싱 결과: {scheduled_time}")
 
                                 # KST로 변환
                                 if scheduled_time.tzinfo:
                                     scheduled_time = scheduled_time.astimezone(timezone(timedelta(hours=9)))
+                                    logger.info(f"   - KST 변환 결과: {scheduled_time}")
                                 else:
                                     scheduled_time = scheduled_time.replace(tzinfo=timezone(timedelta(hours=9)))
+                                    logger.info(f"   - KST 설정 결과: {scheduled_time}")
 
                                 # 현재 시간과 비교 (타임존 제거)
                                 scheduled_time_naive = scheduled_time.replace(tzinfo=None)
+                                logger.info(f"   - 최종 비교용 시간: {scheduled_time_naive}")
 
                                 if current_time < scheduled_time_naive:
                                     remaining = scheduled_time_naive - current_time
@@ -315,16 +587,24 @@ class YogiyoReplyPoster:
                         except Exception as e:
                             logger.warning(f"⚠️ schedulable_reply_date 파싱 오류: {e}, 즉시 처리로 진행")
 
+                    logger.info(f"✅ 리뷰 추가됨: {review_id} ({reviewer_name})")
                     filtered_reviews.append(review)
 
                     # limit에 도달하면 중단
-                    if len(filtered_reviews) >= limit:
+                    if limit and len(filtered_reviews) >= limit:
+                        logger.info(f"⏹️ 제한 개수 도달: {limit}개")
                         break
 
-                logger.info(f"시간 필터링 후 리뷰: {len(filtered_reviews)}개")
+                logger.info(f"📊 최종 결과: 초기 {len(result.data)}개 → 필터링 후 {len(filtered_reviews)}개")
+
+                if filtered_reviews:
+                    logger.info("🎯 최종 선택된 리뷰:")
+                    for i, review in enumerate(filtered_reviews, 1):
+                        logger.info(f"   {i}. {review.get('id')} ({review.get('reviewer_name')})")
+
                 return filtered_reviews
             else:
-                logger.info("답글 대기 리뷰가 없습니다")
+                logger.info("❌ 초기 조회 결과가 없습니다 (draft 상태 리뷰 없음)")
                 return []
             
         except Exception as e:
@@ -334,54 +614,35 @@ class YogiyoReplyPoster:
     async def _process_reply_tasks(self, pending_reviews: List[Dict]) -> List[Dict]:
         """답글 작업 처리"""
         results = []
-        
+
         # 현재 페이지의 리뷰 추출
         page_reviews = await self.extract_reviews_from_page()
+        logger.info(f"📄 페이지에서 추출된 리뷰: {len(page_reviews)}개")
+        logger.info(f"🎯 처리할 DB 리뷰: {len(pending_reviews)}개")
         
-        for review_data in pending_reviews:
+        for i, review_data in enumerate(pending_reviews, 1):
             try:
                 dsid = review_data.get('yogiyo_dsid')
                 reply_text = review_data.get('reply_text', '')
-                
+                review_id = review_data.get('id')
+                reviewer_name = review_data.get('reviewer_name')
+
+                logger.info(f"🔄 [{i}/{len(pending_reviews)}] 리뷰 처리 중: {review_id} ({reviewer_name})")
+                logger.info(f"   - DSID: {dsid}")
+                logger.info(f"   - 답글 길이: {len(reply_text)}자")
+
                 if not dsid or not reply_text:
+                    logger.warning(f"❌ DSID 또는 답글 텍스트 누락: dsid={dsid}, reply_len={len(reply_text)}")
                     results.append({
                         "success": False,
-                        "review_id": review_data.get('id'),
+                        "review_id": review_id,
                         "error": "DSID 또는 답글 텍스트 없음"
                     })
                     continue
-                
-                # DSID로 리뷰 찾기 (DB 리뷰 정보 전달)
-                matched_review, review_index = await self.find_review_by_dsid(dsid, page_reviews, review_data)
-                
-                if not matched_review:
-                    results.append({
-                        "success": False,
-                        "review_id": review_data.get('id'),
-                        "dsid": dsid,
-                        "error": "리뷰를 찾을 수 없음"
-                    })
-                    continue
-                
-                # 이미 답글이 있는지 확인
-                if matched_review.get('has_reply'):
-                    # DB 상태 업데이트
-                    self.supabase.table('reviews_yogiyo') \
-                        .update({'reply_status': 'sent', 'reply_posted_at': datetime.now().isoformat()}) \
-                        .eq('id', review_data['id']) \
-                        .execute()
-                    
-                    results.append({
-                        "success": True,
-                        "review_id": review_data.get('id'),
-                        "dsid": dsid,
-                        "status": "이미 답글 존재"
-                    })
-                    continue
-                
-                # 답글 등록
-                element_index = matched_review.get('element_index', review_index)
-                result = await self.post_reply(element_index, reply_text, review_data)
+
+                # 실시간 내용 기반 리뷰 매칭
+                logger.info(f"🔍 실시간 리뷰 매칭 시작: {reviewer_name}")
+                result = await self.post_reply_by_content(review_data, reply_text)
 
                 # 결과 처리
                 if isinstance(result, dict):
@@ -946,18 +1207,137 @@ class YogiyoReplyPoster:
         except Exception:
             return False
     
+    async def post_reply_by_content(self, review_data: Dict, reply_text: str) -> Dict[str, Any]:
+        """실시간 내용 기반 리뷰 매칭 후 답글 등록"""
+        try:
+            reviewer_name = review_data.get('reviewer_name', '')
+            review_text = review_data.get('review_text', '')
+            review_id = review_data.get('id')
+
+            logger.info(f"📝 매칭 대상 리뷰: {reviewer_name} - {review_text[:50]}...")
+
+            # 현재 페이지의 모든 리뷰 요소 찾기
+            review_elements = await self.page.query_selector_all('div.ReviewItem__Container-sc-1oxgj67-0')
+            if not review_elements:
+                review_elements = await self.page.query_selector_all('div[class*="ReviewItem"]')
+
+            logger.info(f"📄 페이지에서 {len(review_elements)}개 리뷰 요소 발견")
+
+            # 각 리뷰 요소에서 실시간 매칭 시도
+            for idx, element in enumerate(review_elements):
+                try:
+                    # DOM에서 리뷰어명 추출 (크롤러와 동일한 선택자)
+                    reviewer_selectors = [
+                        'h6.Typography__StyledTypography-sc-r9ksfy-0.dZvFzq',  # 크롤러에서 사용하는 실제 선택자
+                        'h6[class*="Typography__StyledTypography"]',
+                        '.reviewer-name',
+                        '[class*="UserName"]'
+                    ]
+
+                    element_reviewer = ""
+                    for selector in reviewer_selectors:
+                        reviewer_elem = await element.query_selector(selector)
+                        if reviewer_elem:
+                            element_reviewer = await reviewer_elem.text_content()
+                            if element_reviewer:
+                                element_reviewer = element_reviewer.strip()
+                                break
+
+                    # DOM에서 리뷰 내용 추출 (크롤러와 동일한 선택자)
+                    content_selectors = [
+                        'p.ReviewItem__CommentTypography-sc-1oxgj67-3.blUkHI',  # 첫 번째 우선순위
+                        'p.Typography__StyledTypography-sc-r9ksfy-0.hLRURJ',    # 두 번째 우선순위
+                        'p[class*="ReviewItem__CommentTypography"]',
+                        'p[class*="Typography__StyledTypography"]',
+                        '.review-content'
+                    ]
+
+                    element_content = ""
+                    for selector in content_selectors:
+                        content_elem = await element.query_selector(selector)
+                        if content_elem:
+                            element_content = await content_elem.text_content()
+                            if element_content:
+                                element_content = element_content.strip()
+                                break
+
+                    logger.info(f"🔍 [{idx}] DOM 리뷰: {element_reviewer} - {element_content[:30]}...")
+
+                    # 리뷰어명 매칭 확인
+                    reviewer_match = (reviewer_name in element_reviewer or element_reviewer in reviewer_name)
+
+                    # 리뷰 내용 매칭 확인 (텍스트 유사도)
+                    content_similarity = self.calculate_text_similarity(review_text, element_content)
+                    content_match = content_similarity >= 0.8
+
+                    logger.info(f"   - 리뷰어 매칭: {reviewer_match} ({reviewer_name} vs {element_reviewer})")
+                    logger.info(f"   - 내용 유사도: {content_similarity:.2f} ({content_match})")
+
+                    # 매칭 성공 조건
+                    if reviewer_match and content_match:
+                        logger.info(f"✅ 리뷰 매칭 성공! 인덱스: {idx}")
+
+                        # 이미 답글이 있는지 확인
+                        has_reply = await self.check_existing_reply(element)
+                        if has_reply:
+                            logger.info("⚠️ 이미 답글이 존재합니다.")
+                            # DB 상태 업데이트
+                            self.supabase.table('reviews_yogiyo') \
+                                .update({'reply_status': 'sent', 'reply_posted_at': datetime.now().isoformat()}) \
+                                .eq('id', review_id) \
+                                .execute()
+
+                            return {
+                                "success": True,
+                                "status": "이미 답글 존재",
+                                "review_id": review_id
+                            }
+
+                        # 답글 등록 실행
+                        return await self.post_reply_to_element(element, reply_text, review_data)
+
+                except Exception as e:
+                    logger.warning(f"리뷰 요소 {idx} 처리 중 오류: {e}")
+                    continue
+
+            # 매칭 실패
+            logger.error(f"❌ 리뷰 매칭 실패: {reviewer_name}")
+            return {
+                "success": False,
+                "error": "페이지에서 해당 리뷰를 찾을 수 없음",
+                "review_id": review_id
+            }
+
+        except Exception as e:
+            logger.error(f"post_reply_by_content 오류: {e}")
+            return {
+                "success": False,
+                "error": f"답글 등록 중 오류: {str(e)}",
+                "review_id": review_data.get('id')
+            }
+
     async def post_reply(self, review_element_index: int, reply_text: str, review_data: Optional[Dict] = None) -> Dict[str, Any]:
         """답글 등록"""
         try:
             logger.info(f"답글 등록 시작 (리뷰 인덱스: {review_element_index})")
             
             # 리뷰 요소 다시 찾기 (크롤러와 동일한 선택자)
+            logger.info(f"📄 페이지에서 리뷰 요소 재탐색 중...")
             review_elements = await self.page.query_selector_all('div.ReviewItem__Container-sc-1oxgj67-0')
+            logger.info(f"   - 첫 번째 선택자로 {len(review_elements)}개 발견")
+
             if not review_elements:
                 review_elements = await self.page.query_selector_all('div[class*="ReviewItem"]')
+                logger.info(f"   - 두 번째 선택자로 {len(review_elements)}개 발견")
+
+            logger.info(f"📊 최종 리뷰 요소 수: {len(review_elements)}개, 요청 인덱스: {review_element_index}")
+
             if review_element_index >= len(review_elements):
-                logger.error(f"리뷰 인덱스 {review_element_index}가 범위를 벗어남")
-                return False
+                logger.error(f"❌ 리뷰 인덱스 {review_element_index}가 범위를 벗어남 (최대: {len(review_elements)-1})")
+                return {
+                    "success": False,
+                    "error": f"인덱스 범위 초과: {review_element_index}/{len(review_elements)}"
+                }
             
             review_element = review_elements[review_element_index]
             

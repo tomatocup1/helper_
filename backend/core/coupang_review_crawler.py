@@ -15,6 +15,7 @@ import random
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 import hashlib
+import traceback
 try:
     import pyperclip  # 클립보드 제어용
 except ImportError:
@@ -2841,237 +2842,57 @@ class CoupangReviewCrawler:
         return reviews
     
     async def _extract_reviews_from_page(self, page: Page) -> List[Dict[str, Any]]:
-        """현재 페이지에서 리뷰 추출 (실제 리뷰 컨테이너 기준)"""
+        """현재 페이지에서 리뷰 추출 (테이블 구조 기반)"""
         reviews = []
-        
+
         try:
-            # 더 정확한 리뷰 컨테이너 찾기 - 주문번호가 있는 요소를 기준으로
-            # 실제 개별 리뷰 아이템을 직접 찾는 방식으로 변경
-            review_items = []
-            
-            # 실제 리뷰 데이터가 있는 컨테이너만 찾기
-            # 1. 리뷰어 정보 클래스를 기준으로 찾기 (가장 확실한 방법)
-            reviewer_elements = await page.query_selector_all('.css-hdvjju.eqn7l9b7')
-            logger.info(f"리뷰어 정보 요소 {len(reviewer_elements)}개 발견")
-            
-            for reviewer_element in reviewer_elements:
-                try:
-                    # 리뷰어 요소에서 상위로 올라가며 완전한 리뷰 컨테이너 찾기
-                    current = reviewer_element
-                    for level in range(8):  # 최대 8단계 위로
-                        parent = await current.query_selector('xpath=..')
-                        if not parent:
-                            break
-                        
-                        # 부모 요소의 크기와 내용 확인
-                        try:
-                            parent_text = await parent.inner_text()
-                            parent_html = await parent.inner_html()
-                            
-                            # 완전한 리뷰 컨테이너인지 확인 - 모든 필수 요소가 있어야 함
-                            has_reviewer = 'css-hdvjju' in parent_html and 'eqn7l9b7' in parent_html  # 리뷰어 정보
-                            has_date = 'css-1bqps6x' in parent_html and 'eqn7l9b8' in parent_html  # 리뷰 날짜
-                            has_order_info = '주문번호' in parent_text  # 주문 정보
-                            has_reasonable_size = 100 < len(parent_text) < 1500  # 적절한 크기
-                            
-                            # SVG나 리뷰 텍스트 중 하나는 있어야 함 (별점만 있거나 리뷰 텍스트만 있거나)
-                            has_rating_or_text = ('svg' in parent_html) or ('css-16m6tj' in parent_html and 'eqn7l9b5' in parent_html)
-                            
-                            # 페이지 헤더가 아닌지 확인
-                            not_page_header = not any(bad in parent_text for bad in ['리뷰 관리', 'review-wrapper-title', '총평점', '미답변'])
-                            
-                            is_complete_review = (
-                                has_reviewer and 
-                                has_date and 
-                                has_order_info and 
-                                has_reasonable_size and
-                                has_rating_or_text and
-                                not_page_header
-                            )
-                            
-                            if is_complete_review:
-                                review_items.append(parent)
-                                logger.debug(f"완전한 리뷰 컨테이너 발견 (레벨 {level}): {parent_text[:100]}...")
-                                break
-                                
-                        except Exception:
-                            pass
-                        
-                        current = parent
-                        
-                except Exception:
-                    continue
-            
-            # 2. 백업: 주문번호가 있으면서 실제 리뷰 데이터도 있는 경우 추가로 찾기
-            if len(review_items) < 3:  # 리뷰가 적게 발견된 경우 추가 검색
-                order_number_elements = await page.query_selector_all('li:has(strong:has-text("주문번호"))')
-                logger.info(f"백업 검색: 주문번호가 있는 요소 {len(order_number_elements)}개 발견")
-                
-                for order_element in order_number_elements:
+            # 실제 HTML 구조에 맞게 테이블 기반으로 리뷰 추출
+            # tbody > tr 구조에서 각 tr이 하나의 리뷰
+            logger.info("테이블 기반 리뷰 추출 시작...")
+
+            review_containers = []
+
+            # tbody 요소 찾기
+            tbody_elements = await page.query_selector_all('tbody')
+            logger.info(f"tbody 요소 {len(tbody_elements)}개 발견")
+
+            for tbody in tbody_elements:
+                tr_elements = await tbody.query_selector_all('tr')
+                logger.info(f"tbody 내 tr 요소 {len(tr_elements)}개 발견")
+
+                for i, tr in enumerate(tr_elements):
                     try:
-                        # 주문번호 요소에서 상위로 올라가며 실제 리뷰 컨테이너 찾기
-                        current = order_element
-                        for level in range(8):  # 최대 8단계 위로
-                            parent = await current.query_selector('xpath=..')
-                            if not parent:
-                                break
-                            
-                            # 부모 요소의 크기와 내용 확인
-                            try:
-                                parent_text = await parent.inner_text()
-                                parent_html = await parent.inner_html()
-                                
-                                # 실제 리뷰 데이터가 있는지 확인 (리뷰어 클래스 존재)
-                                has_review_data = any(cls in parent_html for cls in ['css-hdvjju', 'eqn7l9b7'])
-                                has_reasonable_size = 50 < len(parent_text) < 1000
-                                has_order_info = '주문번호' in parent_text
-                                not_page_header = not any(bad in parent_text for bad in ['리뷰 관리', 'review-wrapper-title', '총평점'])
-                                
-                                if has_review_data and has_reasonable_size and has_order_info and not_page_header:
-                                    # 이미 추가된 컨테이너인지 확인
-                                    is_duplicate = False
-                                    for existing_item in review_items:
-                                        try:
-                                            existing_text = await existing_item.inner_text()
-                                            if existing_text[:100] == parent_text[:100]:
-                                                is_duplicate = True
-                                                break
-                                        except Exception:
-                                            pass
-                                    
-                                    if not is_duplicate:
-                                        review_items.append(parent)
-                                        logger.debug(f"백업 리뷰 컨테이너 발견 (레벨 {level}): {parent_text[:50]}...")
-                                    break
-                                    
-                            except Exception:
-                                pass
-                            
-                            current = parent
-                            
-                    except Exception:
+                        tr_text = await tr.inner_text()
+                        tr_html = await tr.inner_html()
+
+                        # 리뷰 행인지 확인하는 조건들 (실제 HTML 패턴 기반)
+                        has_reviewer = '**' in tr_text and '회 주문' in tr_text
+                        has_order_number = '주문번호' in tr_text and 'ㆍ' in tr_text  # "12CCY4ㆍ2025-09-16" 패턴
+                        has_reply_button = '사장님 댓글 등록하기' in tr_text
+                        has_table_structure = 'eqn7l9b0' in tr_html and 'eqn7l9b9' in tr_html  # 좌우 td 구조
+                        is_reasonable_size = 50 < len(tr_text) < 5000  # 최소 50자에서 5000자 사이
+
+                        # 헤더나 기타 요소 제외
+                        is_not_header = not any(header in tr_text for header in [
+                            '리뷰 관리', '평점', '미답변', '전체', '정렬', 'pagination', '필터'
+                        ])
+
+                        if (has_reviewer and has_order_number and has_reply_button and
+                            has_table_structure and is_reasonable_size and is_not_header):
+
+                            review_containers.append(tr)
+                            logger.info(f"리뷰 TR {len(review_containers)} 발견: {tr_text[:100]}...")
+
+                    except Exception as e:
+                        logger.debug(f"TR 요소 {i} 검사 중 오류: {e}")
                         continue
-            
-            # 중복 제거
-            unique_containers = []
-            seen_texts = set()
-            for container in review_items:
+
+            logger.info(f"총 {len(review_containers)}개의 리뷰 TR 발견")
+
+            # 각 리뷰 TR에서 데이터 추출
+            for i, review_tr in enumerate(review_containers):
                 try:
-                    container_text = await container.inner_text()
-                    text_key = container_text[:100]  # 처음 100자로 중복 판별
-                    if text_key not in seen_texts:
-                        unique_containers.append(container)
-                        seen_texts.add(text_key)
-                except Exception:
-                    continue
-            
-            review_containers = unique_containers
-            
-            # 주문번호 기준으로 찾지 못하면 기존 방식 사용
-            if not review_containers:
-                logger.info("주문번호 기반 컨테이너를 찾을 수 없어 리뷰어 이름 기반으로 시도")
-                reviewer_elements = await page.query_selector_all('.css-hdvjju.eqn7l9b7')
-                
-                # 리뷰어 요소를 기반으로 상위 컨테이너 찾기
-                seen_containers = set()
-                for reviewer_element in reviewer_elements:
-                    try:
-                        # 상위 요소로 올라가며 실제 리뷰 컨테이너 찾기
-                        container = reviewer_element
-                        for level in range(10):  # 최대 10단계 위로
-                            container = await container.query_selector('xpath=..')
-                            if not container:
-                                break
-                            
-                            # 주문번호나 주문메뉴가 있는 컨테이너인지 확인
-                            has_order_info = await container.query_selector('li:has(strong:has-text("주문"))') is not None
-                            if has_order_info:
-                                container_id = id(container)
-                                if container_id not in seen_containers:
-                                    review_containers.append(container)
-                                    seen_containers.add(container_id)
-                                break
-                    except Exception:
-                        continue
-            
-            logger.info(f"총 {len(review_containers)}개의 고유 리뷰 컨테이너 발견")
-            
-            # 1SU2MK 주문번호를 포함하는 리뷰 찾기 및 디버깅
-            target_review_found = False
-            for i, review_container in enumerate(review_containers):
-                try:
-                    container_text = await review_container.inner_text()
-                    if "1SU2MK" in container_text:
-                        logger.info(f"=== 1SU2MK 리뷰 발견 (컨테이너 {i+1}) ===")
-                        html_content = await review_container.inner_html()
-                        
-                        # HTML 파일로 저장
-                        filename = f"1SU2MK_review_structure.html"
-                        with open(filename, 'w', encoding='utf-8') as f:
-                            f.write(f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>1SU2MK 리뷰 구조 분석</title>
-</head>
-<body>
-    <h1>1SU2MK 리뷰 HTML 구조</h1>
-    <div style="border: 1px solid #ccc; padding: 20px; margin: 10px;">
-{html_content}
-    </div>
-</body>
-</html>""")
-                        logger.info(f"1SU2MK 리뷰 HTML 저장: {filename}")
-                        
-                        # 텍스트도 저장
-                        text_filename = f"1SU2MK_review_text.txt"
-                        with open(text_filename, 'w', encoding='utf-8') as f:
-                            f.write(f"1SU2MK 리뷰 텍스트 내용:\n")
-                            f.write("="*50 + "\n")
-                            f.write(container_text)
-                        logger.info(f"1SU2MK 리뷰 텍스트 저장: {text_filename}")
-                        
-                        target_review_found = True
-                        break
-                except Exception as e:
-                    logger.error(f"1SU2MK 리뷰 분석 실패: {e}")
-                    
-            if not target_review_found:
-                logger.warning("1SU2MK 리뷰를 찾을 수 없습니다.")
-            
-            # 첫 번째 리뷰의 HTML 구조 디버깅 출력
-            if review_containers:
-                logger.info("=== 첫 번째 리뷰 HTML 구조 디버깅 ===")
-                first_review = review_containers[0]
-                try:
-                    html_content = await first_review.inner_html()
-                    logger.info(f"첫 번째 리뷰 HTML: {html_content[:800]}...")
-                    
-                    # 첫 번째 리뷰도 파일로 저장
-                    filename = f"first_review_structure.html"
-                    with open(filename, 'w', encoding='utf-8') as f:
-                        f.write(f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>첫 번째 리뷰 구조 분석</title>
-</head>
-<body>
-    <h1>첫 번째 리뷰 HTML 구조</h1>
-    <div style="border: 1px solid #ccc; padding: 20px; margin: 10px;">
-{html_content}
-    </div>
-</body>
-</html>""")
-                    logger.info(f"첫 번째 리뷰 HTML 저장: {filename}")
-                    
-                except Exception as e:
-                    logger.error(f"HTML 디버깅 실패: {e}")
-            
-            # 각 컨테이너에서 리뷰 데이터 추출
-            for i, review_container in enumerate(review_containers):
-                try:
-                    review_data = await self._extract_single_review(review_container, i + 1)
+                    review_data = await self._extract_single_review_from_tr(review_tr, i + 1)
                     if review_data:
                         # 중복 체크 (주문번호나 해시 기준)
                         existing_ids = [r['coupangeats_review_id'] for r in reviews]
@@ -3080,16 +2901,203 @@ class CoupangReviewCrawler:
                             logger.debug(f"리뷰 추가: {review_data['reviewer_name']} (ID: {review_data['coupangeats_review_id']})")
                         else:
                             logger.debug(f"중복 리뷰 건너뛰기: {review_data['reviewer_name']} (ID: {review_data['coupangeats_review_id']})")
-                        
+
                 except Exception as e:
                     logger.error(f"리뷰 {i+1} 추출 실패: {e}")
                     continue
-                    
+
         except Exception as e:
             logger.error(f"페이지 리뷰 추출 실패: {e}")
-            
+
         return reviews
-    
+
+    async def _extract_single_review_from_tr(self, review_tr, review_number: int) -> Optional[Dict[str, Any]]:
+        """테이블 행(TR)에서 리뷰 데이터 추출 - 사용자 제공 HTML 구조 기반"""
+        try:
+            logger.debug(f"TR 리뷰 {review_number} 추출 시작...")
+
+            # TR 전체 텍스트 및 HTML 가져오기
+            tr_text = await review_tr.inner_text()
+            tr_html = await review_tr.inner_html()
+
+            logger.debug(f"TR 리뷰 {review_number} 전체 텍스트: {tr_text[:300]}...")
+
+            # TD 요소들 찾기 (좌측: eqn7l9b0, 우측: eqn7l9b9)
+            left_td = await review_tr.query_selector('td.eqn7l9b0')  # 요약 정보
+            right_td = await review_tr.query_selector('td.eqn7l9b9')  # 상세 정보
+
+            if not left_td or not right_td:
+                logger.warning(f"TR {review_number}: 좌우 TD 구조를 찾을 수 없음")
+                return None
+
+            # 1. 리뷰어 정보 추출 (김** 44회 주문 패턴)
+            reviewer_name = ""
+            order_count = ""
+
+            # 리뷰어 이름 패턴 찾기 (**로 마스킹된 이름)
+            import re
+            reviewer_match = re.search(r'([가-힣]+\*\*)\s*(\d+)회\s*주문', tr_text)
+            if reviewer_match:
+                reviewer_name = reviewer_match.group(1)
+                order_count = reviewer_match.group(2)
+                logger.debug(f"리뷰어 정보: {reviewer_name}, 주문 횟수: {order_count}")
+            else:
+                logger.warning(f"TR {review_number}: 리뷰어 정보를 찾을 수 없음")
+                return None
+
+            # 2. 주문번호와 주문일 추출
+            order_number = ""
+            order_date = ""
+
+            # 주문번호 섹션에서 주문일 추출: 1VKTDWㆍ2025-08-20(주문일)
+            order_match = re.search(r'주문번호\s*([A-Z0-9]+)ㆍ(\d{4}-\d{2}-\d{2})', tr_text)
+            if order_match:
+                order_number = order_match.group(1)
+                order_date = order_match.group(2)
+                logger.debug(f"주문 정보: {order_number}, 주문일: {order_date}")
+
+            # 3. 리뷰 날짜 추출 (우측 TD에서 css-1bqps6x eqn7l9b8 클래스)
+            review_date = ""
+            try:
+                review_date_element = await right_td.query_selector('.css-1bqps6x.eqn7l9b8, span[class*="css-1bqps6x"], span[class*="eqn7l9b8"]')
+                if review_date_element:
+                    review_date_text = await review_date_element.inner_text()
+                    review_date_match = re.search(r'(\d{4}-\d{2}-\d{2})', review_date_text)
+                    if review_date_match:
+                        review_date = review_date_match.group(1)
+                        logger.debug(f"리뷰 날짜: {review_date}")
+
+                # 리뷰 날짜를 찾지 못하면 주문일을 사용
+                if not review_date:
+                    review_date = order_date
+                    logger.debug(f"리뷰 날짜 대체: {review_date}")
+
+            except Exception as e:
+                logger.debug(f"리뷰 날짜 추출 실패: {e}")
+                review_date = order_date
+
+            # 4. 별점 추출 (SVG 요소에서)
+            rating = 0
+            try:
+                # 우측 TD에서 SVG 별점 찾기
+                svg_elements = await right_td.query_selector_all('svg')
+                filled_stars = 0
+                for svg in svg_elements:
+                    # SVG의 fill 속성 확인 (HTML 속성으로)
+                    fill_attr = await svg.get_attribute('fill')
+                    svg_html = await svg.inner_html()
+                    # 채워진 별은 orange 색상이나 특정 색상 코드를 가짐
+                    if ((fill_attr and 'orange' in fill_attr) or
+                        ('fill' in svg_html and ('orange' in svg_html or '#' in svg_html))):
+                        filled_stars += 1
+                rating = filled_stars
+                logger.debug(f"별점: {rating}점")
+            except Exception as e:
+                logger.debug(f"별점 추출 실패: {e}")
+
+            # 4. 리뷰 텍스트 추출 (우측 TD에서)
+            review_text = ""
+            try:
+                # 리뷰 텍스트 선택자들 (사용자 제공 HTML 기반)
+                text_selectors = [
+                    'p.css-16m6tj.eqn7l9b5',  # 기본 선택자
+                    'p[class*="css-16m6tj"]',
+                    'p[class*="eqn7l9b5"]',
+                    'td p',  # 테이블 셀 내 p 태그
+                    'div[class*="review-text"]',
+                    'div p'  # div 내 p 태그
+                ]
+
+                for selector in text_selectors:
+                    try:
+                        text_element = await right_td.query_selector(selector)
+                        if text_element:
+                            review_text = await text_element.inner_text()
+                            review_text = review_text.strip()
+                            if review_text and len(review_text) > 5:  # 의미있는 텍스트인지 확인
+                                logger.debug(f"리뷰 텍스트 추출 성공 ({selector}): {review_text[:50]}...")
+                                break
+                    except Exception:
+                        continue
+
+                # 리뷰 텍스트가 없는 경우 (별점만 있는 리뷰)
+                if not review_text:
+                    review_text = ""  # 빈 문자열로 설정
+                    logger.debug(f"리뷰 텍스트 없음 (별점만 있는 리뷰)")
+
+            except Exception as e:
+                logger.debug(f"리뷰 텍스트 추출 실패: {e}")
+                review_text = ""
+
+            # 5. 고유 ID 생성 (주문번호만 사용)
+            import time
+            review_id = order_number if order_number else f"unknown_{reviewer_name}_{int(time.time())}"
+
+            # 6. 메뉴 정보 추출 (<li><strong>주문메뉴</strong><p>마라탕 ㆍ계란볶음밥鸡蛋炒fan </p></li>)
+            menu_items = []
+            try:
+                # 좌측 TD에서 주문메뉴 섹션 찾기
+                menu_elements = await left_td.query_selector_all('li:has(strong:has-text("주문메뉴")) p, strong:contains("주문메뉴") + p, li:contains("주문메뉴") p')
+
+                for menu_element in menu_elements:
+                    try:
+                        menu_text = await menu_element.inner_text()
+                        menu_text = menu_text.strip()
+                        if menu_text and len(menu_text) > 1:
+                            # 여러 메뉴가 ㆍ로 구분된 경우 분리
+                            menu_parts = [part.strip() for part in menu_text.split('ㆍ')]
+                            for part in menu_parts:
+                                if part and len(part) > 1:
+                                    menu_items.append(part)
+                            logger.debug(f"메뉴 추출 성공: {menu_items}")
+                            break
+                    except Exception:
+                        continue
+
+                # 메뉴를 찾지 못한 경우 텍스트에서 패턴 매칭으로 추출
+                if not menu_items:
+                    left_text = await left_td.inner_text()
+                    menu_match = re.search(r'주문메뉴\s*([^\n]+)', left_text)
+                    if menu_match:
+                        menu_text = menu_match.group(1).strip()
+                        menu_parts = [part.strip() for part in menu_text.split('ㆍ')]
+                        menu_items = [part for part in menu_parts if part and len(part) > 1]
+                        logger.debug(f"패턴 매칭으로 메뉴 추출: {menu_items}")
+
+            except Exception as e:
+                logger.debug(f"메뉴 정보 추출 실패: {e}")
+
+            # 8. 리뷰 데이터 구성
+            review_data = {
+                'coupangeats_review_id': review_id,
+                'reviewer_name': reviewer_name or "익명",
+                'rating': rating,
+                'review_text': review_text,
+                'review_date': review_date,
+                'order_date': order_date,  # 데이터베이스 저장을 위해 추가
+                'order_number': order_number,
+                'order_count': int(order_count) if order_count.isdigit() else 0,
+                'order_menu_items': menu_items,  # 기존 필드명과 일치
+                'delivery_method': "",  # 기본값
+                'has_photos': False,  # 기본값
+                'image_url': None,  # 기본값
+                'photo_urls': [],  # 데이터베이스 저장을 위해 추가
+                'coupangeats_metadata': {  # 데이터베이스 저장을 위해 추가
+                    'order_count': order_count or "",
+                    'delivery_method': "",
+                    'menu_items': menu_items,
+                    'extraction_method': 'table_based_tr'
+                },
+                'platform': 'coupangeats'
+            }
+
+            logger.info(f"TR 리뷰 {review_number} 추출 완료: {reviewer_name} ({rating}점) - {review_text[:30]}...")
+            return review_data
+
+        except Exception as e:
+            logger.error(f"TR 리뷰 {review_number} 추출 실패: {e}")
+            return None
+
     async def _extract_single_review(self, review_element, review_number: int) -> Optional[Dict[str, Any]]:
         """개별 리뷰 데이터 추출 - 사용자 제공 HTML 구조 기반"""
         try:
@@ -3146,7 +3154,9 @@ class CoupangReviewCrawler:
                 
                 logger.debug(f"파싱 결과 - 리뷰어: '{reviewer_name}', 주문횟수: '{order_count}'")
             else:
-                logger.warning("리뷰어 요소를 찾을 수 없습니다. HTML 구조를 확인해주세요.")
+                logger.warning(f"리뷰어 요소를 찾을 수 없습니다. 리뷰 {review_number} HTML 구조를 확인해주세요.")
+                # 빈 리뷰어 이름에 대한 기본값 설정
+                reviewer_name = f"익명{review_number}"
             
             # 2. 리뷰 날짜 추출 (.css-1bqps6x.eqn7l9b8)
             review_date = ""
@@ -3162,15 +3172,61 @@ class CoupangReviewCrawler:
                     year, month, day = date_match.groups()
                     review_date = f"{year}-{month}-{day}"
             
-            # 3. 리뷰 텍스트 추출 (.css-16m6tj.eqn7l9b5)
+            # 3. 리뷰 텍스트 추출 (사용자 제공 HTML 기반 수정)
             review_text = None
-            text_element = await review_element.query_selector('.css-16m6tj.eqn7l9b5')
-            if text_element:
-                review_text = await text_element.inner_text()
-                if review_text:
-                    review_text = review_text.strip()
-                    if len(review_text) == 0:
-                        review_text = None
+
+            # 여러 리뷰 텍스트 선택자 시도
+            text_selectors = [
+                '.css-16m6tj.eqn7l9b5',  # 기존 선택자
+                'p[class*="css-"]:not([class*="pagination"])',  # 일반적인 p 태그
+                'div[class*="css-"] p',  # div 내부의 p 태그
+                'span[class*="css-"]',  # span 태그
+                'td p',  # td 내부의 p 태그
+                'p'  # 마지막 폴백
+            ]
+
+            for selector in text_selectors:
+                try:
+                    text_element = await review_element.query_selector(selector)
+                    if text_element:
+                        potential_text = await text_element.inner_text()
+                        if potential_text and potential_text.strip():
+                            # 리뷰 텍스트인지 확인 (메타데이터 제외)
+                            clean_text = potential_text.strip()
+                            # 주문번호, 날짜, 주문회수 등이 아닌 실제 리뷰 내용인지 확인
+                            if (len(clean_text) > 5 and
+                                '주문번호' not in clean_text and
+                                '주문메뉴' not in clean_text and
+                                '수령방식' not in clean_text and
+                                not clean_text.endswith('회 주문') and
+                                not clean_text.startswith('2025-') and
+                                'pagination' not in clean_text.lower()):
+                                review_text = clean_text
+                                logger.debug(f"리뷰 텍스트 발견 ({selector}): {review_text[:50]}...")
+                                break
+                except Exception:
+                    continue
+
+            # 빈 리뷰 텍스트 처리
+            if not review_text:
+                # 대체 방법: 전체 텍스트에서 리뷰 내용 추출
+                full_text = await review_element.inner_text()
+                lines = full_text.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if (len(line) > 5 and
+                        '주문번호' not in line and
+                        '주문메뉴' not in line and
+                        '수령방식' not in line and
+                        not line.endswith('회 주문') and
+                        not line.startswith('2025-') and
+                        '**' not in line):  # 리뷰어 이름 제외
+                        review_text = line
+                        logger.debug(f"대체 방법으로 리뷰 텍스트 발견: {review_text[:50]}...")
+                        break
+
+            if not review_text:
+                logger.warning("리뷰 텍스트를 찾을 수 없음")
             
             # 4. 주문번호와 주문일 추출
             coupangeats_review_id = ""
@@ -3218,15 +3274,22 @@ class CoupangReviewCrawler:
             rating_data = await self.star_extractor.extract_rating_with_fallback(review_element)
             rating = rating_data.get('rating')
             
-            # 리뷰 ID 생성 (주문번호 우선, 없으면 고유 해시)
+            # 리뷰 ID 생성 (중복 방지 개선)
             if coupangeats_review_id and coupangeats_review_id.strip():
                 review_id = coupangeats_review_id.strip()
                 logger.debug(f"주문번호 기반 ID 사용: {review_id}")
             else:
-                # 더 고유한 해시 기반 ID 생성
-                hash_input = f"{reviewer_name}_{review_date}_{order_date}_{review_text or 'no_text'}_{order_menu}_{delivery_method}_{review_number}_{datetime.now().isoformat()}"
+                # 더 안정적인 해시 기반 ID 생성 (시간 제외)
+                hash_input = f"{reviewer_name}_{review_date}_{order_date}_{review_text or 'no_text'}_{order_menu}_{delivery_method}_{rating}"
                 review_id = hashlib.md5(hash_input.encode()).hexdigest()[:12]
                 logger.debug(f"해시 기반 ID 생성: {review_id}")
+
+            # 중복 방지를 위한 추가 검증
+            if not review_id or len(review_id) < 3:
+                # 비상 상황: 최소한의 고유 ID 생성
+                fallback_hash = f"{reviewer_name}_{review_number}_{datetime.now().timestamp()}"
+                review_id = hashlib.md5(fallback_hash.encode()).hexdigest()[:12]
+                logger.warning(f"비상 ID 생성: {review_id}")
             
             # 기본값 설정 (NULL 방지)
             if not review_date and order_date:
@@ -3267,7 +3330,26 @@ class CoupangReviewCrawler:
             
         except Exception as e:
             logger.error(f"리뷰 {review_number} 추출 실패: {e}")
-            return None
+            logger.error(f"오류 세부 정보: {traceback.format_exc()}")
+
+            # 비상 상황에서도 최소한의 데이터는 반환
+            try:
+                fallback_review = {
+                    'coupangeats_review_id': f'ERROR_{review_number}_{int(datetime.now().timestamp())}',
+                    'reviewer_name': f'오류_{review_number}',
+                    'review_text': None,
+                    'rating': 5,
+                    'review_date': datetime.now().strftime('%Y-%m-%d'),
+                    'order_date': datetime.now().strftime('%Y-%m-%d'),
+                    'order_menu': '',
+                    'delivery_method': '',
+                    'image_url': None,
+                    'extraction_error': str(e)
+                }
+                logger.warning(f"비상 데이터 반환: {fallback_review['coupangeats_review_id']}")
+                return fallback_review
+            except:
+                return None
     
     async def _go_to_next_page(self, page: Page) -> bool:
         """다음 페이지로 이동"""
@@ -3632,7 +3714,16 @@ async def main():
         max_pages=args.max_pages
     )
     
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    # Windows 콘솔 인코딩 문제 해결
+    try:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    except UnicodeEncodeError:
+        # UTF-8로 출력하거나 ASCII로 안전하게 출력
+        import sys
+        if sys.stdout.encoding.lower() != 'utf-8':
+            print(json.dumps(result, ensure_ascii=True, indent=2))
+        else:
+            print(json.dumps(result, ensure_ascii=False, indent=2).encode('utf-8').decode('utf-8'))
 
 
 if __name__ == "__main__":

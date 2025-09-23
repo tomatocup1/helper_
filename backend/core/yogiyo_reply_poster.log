@@ -786,3 +786,523 @@
 2025-09-16 14:41:31,391 - __main__ - ERROR - 답글 대기 리뷰 조회 실패: unsupported operand type(s) for *: 'NoneType' and 'int'
 2025-09-16 14:41:31,391 - __main__ - INFO - 처리할 답글이 없습니다
 2025-09-16 14:41:31,391 - __main__ - INFO - 리소스 정리 완료
+2025-09-18 14:09:52,531 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-18 14:09:52,532 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-18 14:09:52,532 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-18 14:09:52,532 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-18 14:09:52,565 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-18 14:09:52,566 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-18 14:09:52,576 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-18 14:09:52,576 - __main__ - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-09-18 14:09:52,576 - __main__ - ERROR - 답글 대기 리뷰 조회 실패: unsupported operand type(s) for *: 'NoneType' and 'int'
+2025-09-18 14:09:52,576 - __main__ - INFO - 처리할 답글이 없습니다
+2025-09-18 14:09:52,576 - __main__ - INFO - 리소스 정리 완료
+2025-09-18 15:05:47,893 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-18 15:05:47,894 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-18 15:05:47,894 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-18 15:05:47,894 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-18 15:05:47,942 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-18 15:05:47,943 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-18 15:05:47,953 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-18 15:05:47,954 - __main__ - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-09-18 15:05:47,954 - __main__ - ERROR - 답글 대기 리뷰 조회 실패: unsupported operand type(s) for *: 'NoneType' and 'int'
+2025-09-18 15:05:47,954 - __main__ - INFO - 처리할 답글이 없습니다
+2025-09-18 15:05:47,954 - __main__ - INFO - 리소스 정리 완료
+2025-09-18 15:19:43,532 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-18 15:19:43,532 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-18 15:19:43,534 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-18 15:19:43,534 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-18 15:19:43,579 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-18 15:19:43,579 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-18 15:19:43,590 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-18 15:19:43,590 - __main__ - INFO - 답글 대기 상태 리뷰 검색 중...
+2025-09-18 15:19:43,590 - __main__ - ERROR - 답글 대기 리뷰 조회 실패: unsupported operand type(s) for *: 'NoneType' and 'int'
+2025-09-18 15:19:43,590 - __main__ - INFO - 처리할 답글이 없습니다
+2025-09-18 15:19:43,590 - __main__ - INFO - 리소스 정리 완료
+2025-09-18 15:51:59,927 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-18 15:51:59,930 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-18 15:51:59,932 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-18 15:51:59,933 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-18 15:52:00,079 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-18 15:52:00,080 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-18 15:52:00,090 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-18 15:52:00,090 - __main__ - INFO - 🔍 답글 대기 상태 리뷰 검색 중... (Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-18 15:52:00,090 - __main__ - INFO - 📊 데이터베이스 쿼리 조건:
+2025-09-18 15:52:00,090 - __main__ - INFO -    - 테이블: reviews_yogiyo
+2025-09-18 15:52:00,090 - __main__ - INFO -    - platform_store_id = 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-18 15:52:00,091 - __main__ - INFO -    - reply_status = 'draft'
+2025-09-18 15:52:00,091 - __main__ - INFO -    - reply_text IS NOT NULL
+2025-09-18 15:52:00,091 - __main__ - INFO -    - limit = unlimited
+2025-09-18 15:52:00,237 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating%2C%20schedulable_reply_date&platform_store_id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&reply_status=eq.draft&reply_text=neq.null "HTTP/1.1 200 OK"
+2025-09-18 15:52:00,239 - __main__ - INFO - 📝 초기 조회 결과: 4개 답글 대기 리뷰 발견
+2025-09-18 15:52:00,239 - __main__ - INFO -    1. ID:e5cddc99-b71e-430c-a393-ad59eb1e4ea6 | 리뷰어:sy** | 답글:124자 | 스케줄:2025-09-06T00:00:00
+2025-09-18 15:52:00,239 - __main__ - INFO -    2. ID:03ea2040-8f87-4f82-8eae-aee4028202e5 | 리뷰어:ch** | 답글:133자 | 스케줄:2025-09-20T00:00:00
+2025-09-18 15:52:00,240 - __main__ - INFO -    3. ID:1eb70844-9616-424c-9263-e6603a08fe65 | 리뷰어:db** | 답글:107자 | 스케줄:2025-09-07T00:00:00
+2025-09-18 15:52:00,240 - __main__ - INFO -    4. ID:41cffb45-0875-4c9a-9b18-260c24015a40 | 리뷰어:ki** | 답글:101자 | 스케줄:2025-08-25T00:00:00
+2025-09-18 15:52:00,240 - __main__ - INFO - ⏰ 현재 시간: 2025-09-18 15:52:00.240726
+2025-09-18 15:52:00,241 - __main__ - INFO - 🔍 리뷰 검사 중: e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (sy**)
+2025-09-18 15:52:00,241 - __main__ - INFO -    - schedulable_reply_date: 2025-09-06T00:00:00 (타입: <class 'str'>)
+2025-09-18 15:52:00,242 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-18 15:52:00,242 - __main__ - INFO -    - UTC 파싱 결과: 2025-09-06 00:00:00
+2025-09-18 15:52:00,242 - __main__ - INFO -    - KST 설정 결과: 2025-09-06 00:00:00+09:00
+2025-09-18 15:52:00,243 - __main__ - INFO -    - 최종 비교용 시간: 2025-09-06 00:00:00
+2025-09-18 15:52:00,243 - __main__ - INFO - ✅ 답글 등록 가능: e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (예약 시간 도달)
+2025-09-18 15:52:00,243 - __main__ - INFO - ✅ 리뷰 추가됨: e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (sy**)
+2025-09-18 15:52:00,243 - __main__ - INFO - 🔍 리뷰 검사 중: 03ea2040-8f87-4f82-8eae-aee4028202e5 (ch**)
+2025-09-18 15:52:00,244 - __main__ - INFO -    - schedulable_reply_date: 2025-09-20T00:00:00 (타입: <class 'str'>)
+2025-09-18 15:52:00,244 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-18 15:52:00,244 - __main__ - INFO -    - UTC 파싱 결과: 2025-09-20 00:00:00
+2025-09-18 15:52:00,246 - __main__ - INFO -    - KST 설정 결과: 2025-09-20 00:00:00+09:00
+2025-09-18 15:52:00,246 - __main__ - INFO -    - 최종 비교용 시간: 2025-09-20 00:00:00
+2025-09-18 15:52:00,246 - __main__ - INFO - ⏳ 답글 등록 대기: 03ea2040-8f87-4f82-8eae-aee4028202e5 (남은 시간: 1 day, 8:07:59.759274)
+2025-09-18 15:52:00,246 - __main__ - INFO - 🔍 리뷰 검사 중: 1eb70844-9616-424c-9263-e6603a08fe65 (db**)
+2025-09-18 15:52:00,247 - __main__ - INFO -    - schedulable_reply_date: 2025-09-07T00:00:00 (타입: <class 'str'>)
+2025-09-18 15:52:00,247 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-18 15:52:00,247 - __main__ - INFO -    - UTC 파싱 결과: 2025-09-07 00:00:00
+2025-09-18 15:52:00,248 - __main__ - INFO -    - KST 설정 결과: 2025-09-07 00:00:00+09:00
+2025-09-18 15:52:00,248 - __main__ - INFO -    - 최종 비교용 시간: 2025-09-07 00:00:00
+2025-09-18 15:52:00,248 - __main__ - INFO - ✅ 답글 등록 가능: 1eb70844-9616-424c-9263-e6603a08fe65 (예약 시간 도달)
+2025-09-18 15:52:00,248 - __main__ - INFO - ✅ 리뷰 추가됨: 1eb70844-9616-424c-9263-e6603a08fe65 (db**)
+2025-09-18 15:52:00,248 - __main__ - INFO - 🔍 리뷰 검사 중: 41cffb45-0875-4c9a-9b18-260c24015a40 (ki**)
+2025-09-18 15:52:00,249 - __main__ - INFO -    - schedulable_reply_date: 2025-08-25T00:00:00 (타입: <class 'str'>)
+2025-09-18 15:52:00,249 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-18 15:52:00,249 - __main__ - INFO -    - UTC 파싱 결과: 2025-08-25 00:00:00
+2025-09-18 15:52:00,249 - __main__ - INFO -    - KST 설정 결과: 2025-08-25 00:00:00+09:00
+2025-09-18 15:52:00,249 - __main__ - INFO -    - 최종 비교용 시간: 2025-08-25 00:00:00
+2025-09-18 15:52:00,250 - __main__ - INFO - ✅ 답글 등록 가능: 41cffb45-0875-4c9a-9b18-260c24015a40 (예약 시간 도달)
+2025-09-18 15:52:00,250 - __main__ - INFO - ✅ 리뷰 추가됨: 41cffb45-0875-4c9a-9b18-260c24015a40 (ki**)
+2025-09-18 15:52:00,250 - __main__ - INFO - 📊 최종 결과: 초기 4개 → 필터링 후 3개
+2025-09-18 15:52:00,250 - __main__ - INFO - 🎯 최종 선택된 리뷰:
+2025-09-18 15:52:00,251 - __main__ - INFO -    1. e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (sy**)
+2025-09-18 15:52:00,251 - __main__ - INFO -    2. 1eb70844-9616-424c-9263-e6603a08fe65 (db**)
+2025-09-18 15:52:00,251 - __main__ - INFO -    3. 41cffb45-0875-4c9a-9b18-260c24015a40 (ki**)
+2025-09-18 15:52:00,251 - __main__ - INFO - 3개 답글 처리 예정
+2025-09-18 15:52:01,277 - __main__ - INFO - 브라우저 초기화 완료
+2025-09-18 15:52:01,277 - __main__ - INFO - 요기요 CEO 로그인 시작
+2025-09-18 15:52:24,460 - __main__ - INFO - 로그인 성공 (URL: https://ceo.yogiyo.co.kr/)
+2025-09-18 15:52:24,461 - __main__ - INFO - 로그인 성공
+2025-09-18 15:52:24,461 - __main__ - INFO - 리뷰 페이지로 이동
+2025-09-18 15:52:28,045 - __main__ - INFO - 매장 선택: 1468227
+2025-09-18 15:52:28,116 - __main__ - INFO - 드롭다운 클릭 성공: div.StoreSelector__SelectedStore-sc-1rowjsb-13
+2025-09-18 15:52:30,175 - __main__ - INFO - 매장 선택 완료: 1468227
+2025-09-18 15:52:35,266 - __main__ - INFO - 미답변 탭 클릭 성공: 미답변 (4)
+2025-09-18 15:52:35,267 - __main__ - INFO - 미답변 탭 클릭 완료
+2025-09-18 15:52:35,299 - __main__ - INFO - 리뷰 컨테이너 4개 발견
+2025-09-18 15:52:35,528 - __main__ - INFO - 페이지에서 4개 리뷰 추출
+2025-09-18 15:52:35,528 - __main__ - INFO - 📄 페이지에서 추출된 리뷰: 4개
+2025-09-18 15:52:35,528 - __main__ - INFO - 🎯 처리할 DB 리뷰: 3개
+2025-09-18 15:52:35,528 - __main__ - INFO - 🔄 [1/3] 리뷰 처리 중: e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (sy**)
+2025-09-18 15:52:35,528 - __main__ - INFO -    - DSID: 9074b52b608fb2ba
+2025-09-18 15:52:35,528 - __main__ - INFO -    - 답글 길이: 124자
+2025-09-18 15:52:35,529 - __main__ - INFO - 🔍 실시간 리뷰 매칭 시작: sy**
+2025-09-18 15:52:35,529 - __main__ - INFO - 📝 매칭 대상 리뷰: sy** - 배달도 금방 오고
+맛있게 먹었어요~~!!!...
+2025-09-18 15:52:35,533 - __main__ - INFO - 📄 페이지에서 4개 리뷰 요소 발견
+2025-09-18 15:52:35,547 - __main__ - INFO - 🔍 [0] DOM 리뷰: ch** - 배달도 빠르고 1인 양도 괜찮고, 근데 먹다보면 안에 ...
+2025-09-18 15:52:35,547 - __main__ - INFO -    - 리뷰어 매칭: False (sy** vs ch**)
+2025-09-18 15:52:35,547 - __main__ - INFO -    - 내용 유사도: 0.06 (False)
+2025-09-18 15:52:35,561 - __main__ - INFO - 🔍 [1] DOM 리뷰: db** - 지난주이어 두번째주문,,,,
+또 시켰다는건 맛나서겠죠?...
+2025-09-18 15:52:35,561 - __main__ - INFO -    - 리뷰어 매칭: False (sy** vs db**)
+2025-09-18 15:52:35,561 - __main__ - INFO -    - 내용 유사도: 0.00 (False)
+2025-09-18 15:52:35,576 - __main__ - INFO - 🔍 [2] DOM 리뷰: sy** - 배달도 금방 오고
+맛있게 먹었어요~~!!!...
+2025-09-18 15:52:35,576 - __main__ - INFO -    - 리뷰어 매칭: True (sy** vs sy**)
+2025-09-18 15:52:35,576 - __main__ - INFO -    - 내용 유사도: 1.00 (True)
+2025-09-18 15:52:35,576 - __main__ - INFO - ✅ 리뷰 매칭 성공! 인덱스: 2
+2025-09-18 15:52:35,587 - __main__ - INFO - ⚠️ 이미 답글이 존재합니다.
+2025-09-18 15:52:36,166 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.e5cddc99-b71e-430c-a393-ad59eb1e4ea6 "HTTP/1.1 200 OK"
+2025-09-18 15:52:36,291 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.e5cddc99-b71e-430c-a393-ad59eb1e4ea6 "HTTP/1.1 200 OK"
+2025-09-18 15:52:39,316 - __main__ - INFO - 🔄 [2/3] 리뷰 처리 중: 1eb70844-9616-424c-9263-e6603a08fe65 (db**)
+2025-09-18 15:52:39,316 - __main__ - INFO -    - DSID: 270db1ba962be380
+2025-09-18 15:52:39,316 - __main__ - INFO -    - 답글 길이: 107자
+2025-09-18 15:52:39,316 - __main__ - INFO - 🔍 실시간 리뷰 매칭 시작: db**
+2025-09-18 15:52:39,316 - __main__ - INFO - 📝 매칭 대상 리뷰: db** - 지난주이어 두번째주문,,,,
+또 시켰다는건 맛나서겠죠??
+잘먹겠습니다....
+2025-09-18 15:52:39,322 - __main__ - INFO - 📄 페이지에서 4개 리뷰 요소 발견
+2025-09-18 15:52:39,339 - __main__ - INFO - 🔍 [0] DOM 리뷰: ch** - 배달도 빠르고 1인 양도 괜찮고, 근데 먹다보면 안에 ...
+2025-09-18 15:52:39,340 - __main__ - INFO -    - 리뷰어 매칭: False (db** vs ch**)
+2025-09-18 15:52:39,340 - __main__ - INFO -    - 내용 유사도: 0.00 (False)
+2025-09-18 15:52:39,353 - __main__ - INFO - 🔍 [1] DOM 리뷰: db** - 지난주이어 두번째주문,,,,
+또 시켰다는건 맛나서겠죠?...
+2025-09-18 15:52:39,354 - __main__ - INFO -    - 리뷰어 매칭: True (db** vs db**)
+2025-09-18 15:52:39,354 - __main__ - INFO -    - 내용 유사도: 1.00 (True)
+2025-09-18 15:52:39,354 - __main__ - INFO - ✅ 리뷰 매칭 성공! 인덱스: 1
+2025-09-18 15:52:39,366 - __main__ - INFO - ⚠️ 이미 답글이 존재합니다.
+2025-09-18 15:52:39,490 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.1eb70844-9616-424c-9263-e6603a08fe65 "HTTP/1.1 200 OK"
+2025-09-18 15:52:39,626 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.1eb70844-9616-424c-9263-e6603a08fe65 "HTTP/1.1 200 OK"
+2025-09-18 15:52:42,632 - __main__ - INFO - 🔄 [3/3] 리뷰 처리 중: 41cffb45-0875-4c9a-9b18-260c24015a40 (ki**)
+2025-09-18 15:52:42,632 - __main__ - INFO -    - DSID: 2a22ca71ebecf2af
+2025-09-18 15:52:42,632 - __main__ - INFO -    - 답글 길이: 101자
+2025-09-18 15:52:42,632 - __main__ - INFO - 🔍 실시간 리뷰 매칭 시작: ki**
+2025-09-18 15:52:42,632 - __main__ - INFO - 📝 매칭 대상 리뷰: ki** - 맛있게 잘 먹었습니다....
+2025-09-18 15:52:42,640 - __main__ - INFO - 📄 페이지에서 4개 리뷰 요소 발견
+2025-09-18 15:52:42,652 - __main__ - INFO - 🔍 [0] DOM 리뷰: ch** - 배달도 빠르고 1인 양도 괜찮고, 근데 먹다보면 안에 ...
+2025-09-18 15:52:42,654 - __main__ - INFO -    - 리뷰어 매칭: False (ki** vs ch**)
+2025-09-18 15:52:42,654 - __main__ - INFO -    - 내용 유사도: 0.00 (False)
+2025-09-18 15:52:42,667 - __main__ - INFO - 🔍 [1] DOM 리뷰: db** - 지난주이어 두번째주문,,,,
+또 시켰다는건 맛나서겠죠?...
+2025-09-18 15:52:42,667 - __main__ - INFO -    - 리뷰어 매칭: False (ki** vs db**)
+2025-09-18 15:52:42,667 - __main__ - INFO -    - 내용 유사도: 0.00 (False)
+2025-09-18 15:52:42,681 - __main__ - INFO - 🔍 [2] DOM 리뷰: sy** - 배달도 금방 오고
+맛있게 먹었어요~~!!!...
+2025-09-18 15:52:42,681 - __main__ - INFO -    - 리뷰어 매칭: False (ki** vs sy**)
+2025-09-18 15:52:42,681 - __main__ - INFO -    - 내용 유사도: 0.14 (False)
+2025-09-18 15:52:42,694 - __main__ - INFO - 🔍 [3] DOM 리뷰: ki** - 맛있게 잘 먹었습니다....
+2025-09-18 15:52:42,695 - __main__ - INFO -    - 리뷰어 매칭: True (ki** vs ki**)
+2025-09-18 15:52:42,695 - __main__ - INFO -    - 내용 유사도: 1.00 (True)
+2025-09-18 15:52:42,695 - __main__ - INFO - ✅ 리뷰 매칭 성공! 인덱스: 3
+2025-09-18 15:52:42,705 - __main__ - INFO - ⚠️ 이미 답글이 존재합니다.
+2025-09-18 15:52:42,783 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.41cffb45-0875-4c9a-9b18-260c24015a40 "HTTP/1.1 200 OK"
+2025-09-18 15:52:42,861 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.41cffb45-0875-4c9a-9b18-260c24015a40 "HTTP/1.1 200 OK"
+2025-09-18 15:52:45,869 - __main__ - INFO - 답글 등록 완료 - 성공: 3, 실패: 0
+2025-09-18 15:52:46,371 - __main__ - INFO - 리소스 정리 완료
+2025-09-18 15:57:50,861 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-18 15:57:50,862 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-18 15:57:50,863 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-18 15:57:50,863 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-18 15:57:50,919 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-18 15:57:50,920 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-18 15:57:50,938 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-18 15:57:50,938 - __main__ - INFO - 🔍 답글 대기 상태 리뷰 검색 중... (Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-18 15:57:50,938 - __main__ - INFO - 📊 데이터베이스 쿼리 조건:
+2025-09-18 15:57:50,938 - __main__ - INFO -    - 테이블: reviews_yogiyo
+2025-09-18 15:57:50,939 - __main__ - INFO -    - platform_store_id = 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-18 15:57:50,939 - __main__ - INFO -    - reply_status = 'draft'
+2025-09-18 15:57:50,939 - __main__ - INFO -    - reply_text IS NOT NULL
+2025-09-18 15:57:50,939 - __main__ - INFO -    - limit = unlimited
+2025-09-18 15:57:51,001 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating%2C%20schedulable_reply_date&platform_store_id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&reply_status=eq.draft&reply_text=neq.null "HTTP/1.1 200 OK"
+2025-09-18 15:57:51,002 - __main__ - INFO - 📝 초기 조회 결과: 4개 답글 대기 리뷰 발견
+2025-09-18 15:57:51,002 - __main__ - INFO -    1. ID:1eb70844-9616-424c-9263-e6603a08fe65 | 리뷰어:db** | 답글:107자 | 스케줄:2025-09-07T00:00:00
+2025-09-18 15:57:51,002 - __main__ - INFO -    2. ID:e5cddc99-b71e-430c-a393-ad59eb1e4ea6 | 리뷰어:sy** | 답글:124자 | 스케줄:2025-09-06T00:00:00
+2025-09-18 15:57:51,002 - __main__ - INFO -    3. ID:41cffb45-0875-4c9a-9b18-260c24015a40 | 리뷰어:ki** | 답글:101자 | 스케줄:2025-08-25T00:00:00
+2025-09-18 15:57:51,002 - __main__ - INFO -    4. ID:03ea2040-8f87-4f82-8eae-aee4028202e5 | 리뷰어:ch** | 답글:133자 | 스케줄:2025-09-17T00:00:00
+2025-09-18 15:57:51,002 - __main__ - INFO - ⏰ 현재 시간: 2025-09-18 15:57:51.002877
+2025-09-18 15:57:51,002 - __main__ - INFO - 🔍 리뷰 검사 중: 1eb70844-9616-424c-9263-e6603a08fe65 (db**)
+2025-09-18 15:57:51,002 - __main__ - INFO -    - schedulable_reply_date: 2025-09-07T00:00:00 (타입: <class 'str'>)
+2025-09-18 15:57:51,002 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-18 15:57:51,003 - __main__ - INFO -    - UTC 파싱 결과: 2025-09-07 00:00:00
+2025-09-18 15:57:51,003 - __main__ - INFO -    - KST 설정 결과: 2025-09-07 00:00:00+09:00
+2025-09-18 15:57:51,003 - __main__ - INFO -    - 최종 비교용 시간: 2025-09-07 00:00:00
+2025-09-18 15:57:51,003 - __main__ - INFO - ✅ 답글 등록 가능: 1eb70844-9616-424c-9263-e6603a08fe65 (예약 시간 도달)
+2025-09-18 15:57:51,003 - __main__ - INFO - ✅ 리뷰 추가됨: 1eb70844-9616-424c-9263-e6603a08fe65 (db**)
+2025-09-18 15:57:51,003 - __main__ - INFO - 🔍 리뷰 검사 중: e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (sy**)
+2025-09-18 15:57:51,003 - __main__ - INFO -    - schedulable_reply_date: 2025-09-06T00:00:00 (타입: <class 'str'>)
+2025-09-18 15:57:51,003 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-18 15:57:51,003 - __main__ - INFO -    - UTC 파싱 결과: 2025-09-06 00:00:00
+2025-09-18 15:57:51,003 - __main__ - INFO -    - KST 설정 결과: 2025-09-06 00:00:00+09:00
+2025-09-18 15:57:51,003 - __main__ - INFO -    - 최종 비교용 시간: 2025-09-06 00:00:00
+2025-09-18 15:57:51,004 - __main__ - INFO - ✅ 답글 등록 가능: e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (예약 시간 도달)
+2025-09-18 15:57:51,004 - __main__ - INFO - ✅ 리뷰 추가됨: e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (sy**)
+2025-09-18 15:57:51,004 - __main__ - INFO - 🔍 리뷰 검사 중: 41cffb45-0875-4c9a-9b18-260c24015a40 (ki**)
+2025-09-18 15:57:51,004 - __main__ - INFO -    - schedulable_reply_date: 2025-08-25T00:00:00 (타입: <class 'str'>)
+2025-09-18 15:57:51,004 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-18 15:57:51,004 - __main__ - INFO -    - UTC 파싱 결과: 2025-08-25 00:00:00
+2025-09-18 15:57:51,004 - __main__ - INFO -    - KST 설정 결과: 2025-08-25 00:00:00+09:00
+2025-09-18 15:57:51,004 - __main__ - INFO -    - 최종 비교용 시간: 2025-08-25 00:00:00
+2025-09-18 15:57:51,004 - __main__ - INFO - ✅ 답글 등록 가능: 41cffb45-0875-4c9a-9b18-260c24015a40 (예약 시간 도달)
+2025-09-18 15:57:51,006 - __main__ - INFO - ✅ 리뷰 추가됨: 41cffb45-0875-4c9a-9b18-260c24015a40 (ki**)
+2025-09-18 15:57:51,006 - __main__ - INFO - 🔍 리뷰 검사 중: 03ea2040-8f87-4f82-8eae-aee4028202e5 (ch**)
+2025-09-18 15:57:51,006 - __main__ - INFO -    - schedulable_reply_date: 2025-09-17T00:00:00 (타입: <class 'str'>)
+2025-09-18 15:57:51,006 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-18 15:57:51,006 - __main__ - INFO -    - UTC 파싱 결과: 2025-09-17 00:00:00
+2025-09-18 15:57:51,006 - __main__ - INFO -    - KST 설정 결과: 2025-09-17 00:00:00+09:00
+2025-09-18 15:57:51,006 - __main__ - INFO -    - 최종 비교용 시간: 2025-09-17 00:00:00
+2025-09-18 15:57:51,006 - __main__ - INFO - ✅ 답글 등록 가능: 03ea2040-8f87-4f82-8eae-aee4028202e5 (예약 시간 도달)
+2025-09-18 15:57:51,006 - __main__ - INFO - ✅ 리뷰 추가됨: 03ea2040-8f87-4f82-8eae-aee4028202e5 (ch**)
+2025-09-18 15:57:51,006 - __main__ - INFO - 📊 최종 결과: 초기 4개 → 필터링 후 4개
+2025-09-18 15:57:51,007 - __main__ - INFO - 🎯 최종 선택된 리뷰:
+2025-09-18 15:57:51,007 - __main__ - INFO -    1. 1eb70844-9616-424c-9263-e6603a08fe65 (db**)
+2025-09-18 15:57:51,007 - __main__ - INFO -    2. e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (sy**)
+2025-09-18 15:57:51,007 - __main__ - INFO -    3. 41cffb45-0875-4c9a-9b18-260c24015a40 (ki**)
+2025-09-18 15:57:51,007 - __main__ - INFO -    4. 03ea2040-8f87-4f82-8eae-aee4028202e5 (ch**)
+2025-09-18 15:57:51,007 - __main__ - INFO - 4개 답글 처리 예정
+2025-09-18 15:57:52,055 - __main__ - INFO - 브라우저 초기화 완료
+2025-09-18 15:57:52,055 - __main__ - INFO - 요기요 CEO 로그인 시작
+2025-09-18 15:58:11,528 - __main__ - INFO - 로그인 성공 (URL: https://ceo.yogiyo.co.kr/)
+2025-09-18 15:58:11,529 - __main__ - INFO - 로그인 성공
+2025-09-18 15:58:11,529 - __main__ - INFO - 리뷰 페이지로 이동
+2025-09-18 15:58:14,863 - __main__ - INFO - 매장 선택: 1468227
+2025-09-18 15:58:15,000 - __main__ - INFO - 드롭다운 클릭 성공: div.StoreSelector__SelectedStore-sc-1rowjsb-13
+2025-09-18 15:58:17,047 - __main__ - INFO - 매장 선택 완료: 1468227
+2025-09-18 15:58:22,168 - __main__ - INFO - 미답변 탭 클릭 성공: 미답변 (4)
+2025-09-18 15:58:22,169 - __main__ - INFO - 미답변 탭 클릭 완료
+2025-09-18 15:58:22,197 - __main__ - INFO - 리뷰 컨테이너 4개 발견
+2025-09-18 15:58:22,417 - __main__ - INFO - 페이지에서 4개 리뷰 추출
+2025-09-18 15:58:22,417 - __main__ - INFO - 📄 페이지에서 추출된 리뷰: 4개
+2025-09-18 15:58:22,417 - __main__ - INFO - 🎯 처리할 DB 리뷰: 4개
+2025-09-18 15:58:22,417 - __main__ - INFO - 🔄 [1/4] 리뷰 처리 중: 1eb70844-9616-424c-9263-e6603a08fe65 (db**)
+2025-09-18 15:58:22,417 - __main__ - INFO -    - DSID: 270db1ba962be380
+2025-09-18 15:58:22,418 - __main__ - INFO -    - 답글 길이: 107자
+2025-09-18 15:58:22,418 - __main__ - INFO - 🔍 실시간 리뷰 매칭 시작: db**
+2025-09-18 15:58:22,418 - __main__ - INFO - 📝 매칭 대상 리뷰: db** - 지난주이어 두번째주문,,,,
+또 시켰다는건 맛나서겠죠??
+잘먹겠습니다....
+2025-09-18 15:58:22,422 - __main__ - INFO - 📄 페이지에서 4개 리뷰 요소 발견
+2025-09-18 15:58:22,436 - __main__ - INFO - 🔍 [0] DOM 리뷰: ch** - 배달도 빠르고 1인 양도 괜찮고, 근데 먹다보면 안에 ...
+2025-09-18 15:58:22,437 - __main__ - INFO -    - 리뷰어 매칭: False (db** vs ch**)
+2025-09-18 15:58:22,437 - __main__ - INFO -    - 내용 유사도: 0.00 (False)
+2025-09-18 15:58:22,450 - __main__ - INFO - 🔍 [1] DOM 리뷰: db** - 지난주이어 두번째주문,,,,
+또 시켰다는건 맛나서겠죠?...
+2025-09-18 15:58:22,451 - __main__ - INFO -    - 리뷰어 매칭: True (db** vs db**)
+2025-09-18 15:58:22,451 - __main__ - INFO -    - 내용 유사도: 1.00 (True)
+2025-09-18 15:58:22,451 - __main__ - INFO - ✅ 리뷰 매칭 성공! 인덱스: 1
+2025-09-18 15:58:22,451 - __main__ - INFO - 🔍 답글 존재 여부 확인 중...
+2025-09-18 15:58:22,454 - __main__ - INFO -    - 선택자 1 (.ReviewReply__Container-sc-1536a88-0): 없음
+2025-09-18 15:58:22,456 - __main__ - INFO -    - 선택자 2 (.ReviewReply__ContentContainer-sc-1536a88-1): 없음
+2025-09-18 15:58:22,459 - __main__ - INFO -    - 선택자 3 ([class*="ReviewReply__Container"]): 없음
+2025-09-18 15:58:22,462 - __main__ - INFO -    - 선택자 4 ([class*="ReviewReply__Content"]): 없음
+2025-09-18 15:58:22,465 - __main__ - INFO -    - 선택자 5 (.owner-reply): 없음
+2025-09-18 15:58:22,465 - __main__ - INFO - ✅ 답글 없음 - 새 답글 작성 가능
+2025-09-18 15:58:22,465 - __main__ - INFO - 📝 답글 등록 시작: db**
+2025-09-18 15:58:22,470 - __main__ - INFO - 답글 버튼 발견: button.ReviewReply__AddReplyButton-sc-1536a88-10:has-text("댓글쓰기")
+2025-09-18 15:58:24,558 - __main__ - INFO - 답글 입력창 발견: textarea.ReviewReply__CustomTextarea-sc-1536a88-5
+2025-09-18 15:58:25,603 - __main__ - INFO - 답글 입력 완료: db**님, 두 번째 주문해 주셔서 정말 감사해요! 😊 맛있게 드셨다면 저희도 기쁘네요. ...
+2025-09-18 15:58:25,617 - __main__ - INFO - 등록 버튼 발견: div.ReviewReply__ActionButtonWrapper-sc-1536a88-8 button:has-text("등록")
+2025-09-18 15:58:27,673 - __main__ - INFO - 답글 등록 버튼 클릭 완료
+2025-09-18 15:58:29,687 - __main__ - INFO - [YOGIYO] 🔍 금지어 팝업 확인 중...
+2025-09-18 15:58:29,698 - __main__ - INFO - [YOGIYO] ✅ 요기요 금지어 팝업 없음 - 정상 처리
+2025-09-18 15:58:33,707 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.1eb70844-9616-424c-9263-e6603a08fe65 "HTTP/1.1 200 OK"
+2025-09-18 15:58:33,708 - __main__ - INFO - ✅ 답글 등록 성공: db**
+2025-09-18 15:58:33,847 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.1eb70844-9616-424c-9263-e6603a08fe65 "HTTP/1.1 200 OK"
+2025-09-18 15:58:36,859 - __main__ - INFO - 🔄 [2/4] 리뷰 처리 중: e5cddc99-b71e-430c-a393-ad59eb1e4ea6 (sy**)
+2025-09-18 15:58:36,859 - __main__ - INFO -    - DSID: 9074b52b608fb2ba
+2025-09-18 15:58:36,859 - __main__ - INFO -    - 답글 길이: 124자
+2025-09-18 15:58:36,861 - __main__ - INFO - 🔍 실시간 리뷰 매칭 시작: sy**
+2025-09-18 15:58:36,861 - __main__ - INFO - 📝 매칭 대상 리뷰: sy** - 배달도 금방 오고
+맛있게 먹었어요~~!!!...
+2025-09-18 15:58:36,871 - __main__ - INFO - 📄 페이지에서 3개 리뷰 요소 발견
+2025-09-18 15:58:36,902 - __main__ - INFO - 🔍 [0] DOM 리뷰: ch** - 배달도 빠르고 1인 양도 괜찮고, 근데 먹다보면 안에 ...
+2025-09-18 15:58:36,902 - __main__ - INFO -    - 리뷰어 매칭: False (sy** vs ch**)
+2025-09-18 15:58:36,903 - __main__ - INFO -    - 내용 유사도: 0.06 (False)
+2025-09-18 15:58:36,920 - __main__ - INFO - 🔍 [1] DOM 리뷰: sy** - 배달도 금방 오고
+맛있게 먹었어요~~!!!...
+2025-09-18 15:58:36,921 - __main__ - INFO -    - 리뷰어 매칭: True (sy** vs sy**)
+2025-09-18 15:58:36,921 - __main__ - INFO -    - 내용 유사도: 1.00 (True)
+2025-09-18 15:58:36,921 - __main__ - INFO - ✅ 리뷰 매칭 성공! 인덱스: 1
+2025-09-18 15:58:36,921 - __main__ - INFO - 🔍 답글 존재 여부 확인 중...
+2025-09-18 15:58:36,925 - __main__ - INFO -    - 선택자 1 (.ReviewReply__Container-sc-1536a88-0): 없음
+2025-09-18 15:58:36,927 - __main__ - INFO -    - 선택자 2 (.ReviewReply__ContentContainer-sc-1536a88-1): 없음
+2025-09-18 15:58:36,930 - __main__ - INFO -    - 선택자 3 ([class*="ReviewReply__Container"]): 없음
+2025-09-18 15:58:36,933 - __main__ - INFO -    - 선택자 4 ([class*="ReviewReply__Content"]): 없음
+2025-09-18 15:58:36,936 - __main__ - INFO -    - 선택자 5 (.owner-reply): 없음
+2025-09-18 15:58:36,936 - __main__ - INFO - ✅ 답글 없음 - 새 답글 작성 가능
+2025-09-18 15:58:36,936 - __main__ - INFO - 📝 답글 등록 시작: sy**
+2025-09-18 15:58:36,941 - __main__ - INFO - 답글 버튼 발견: button.ReviewReply__AddReplyButton-sc-1536a88-10:has-text("댓글쓰기")
+2025-09-18 15:58:38,996 - __main__ - INFO - 답글 입력창 발견: textarea.ReviewReply__CustomTextarea-sc-1536a88-5
+2025-09-18 15:58:40,091 - __main__ - INFO - 답글 입력 완료: sy**님, 소중한 리뷰 감사해요! 😊 배달이 빨리 도착하고 맛있게 드셨다니 정말 기쁘네요...
+2025-09-18 15:58:40,115 - __main__ - INFO - 등록 버튼 발견: div.ReviewReply__ActionButtonWrapper-sc-1536a88-8 button:has-text("등록")
+2025-09-18 15:58:42,162 - __main__ - INFO - 답글 등록 버튼 클릭 완료
+2025-09-18 15:58:44,165 - __main__ - INFO - [YOGIYO] 🔍 금지어 팝업 확인 중...
+2025-09-18 15:58:44,175 - __main__ - INFO - [YOGIYO] ✅ 요기요 금지어 팝업 없음 - 정상 처리
+2025-09-18 15:58:47,453 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.e5cddc99-b71e-430c-a393-ad59eb1e4ea6 "HTTP/1.1 200 OK"
+2025-09-18 15:58:47,456 - __main__ - INFO - ✅ 답글 등록 성공: sy**
+2025-09-18 15:58:47,535 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.e5cddc99-b71e-430c-a393-ad59eb1e4ea6 "HTTP/1.1 200 OK"
+2025-09-18 15:58:50,550 - __main__ - INFO - 🔄 [3/4] 리뷰 처리 중: 41cffb45-0875-4c9a-9b18-260c24015a40 (ki**)
+2025-09-18 15:58:50,550 - __main__ - INFO -    - DSID: 2a22ca71ebecf2af
+2025-09-18 15:58:50,551 - __main__ - INFO -    - 답글 길이: 101자
+2025-09-18 15:58:50,551 - __main__ - INFO - 🔍 실시간 리뷰 매칭 시작: ki**
+2025-09-18 15:58:50,552 - __main__ - INFO - 📝 매칭 대상 리뷰: ki** - 맛있게 잘 먹었습니다....
+2025-09-18 15:58:50,566 - __main__ - INFO - 📄 페이지에서 2개 리뷰 요소 발견
+2025-09-18 15:58:50,603 - __main__ - INFO - 🔍 [0] DOM 리뷰: ch** - 배달도 빠르고 1인 양도 괜찮고, 근데 먹다보면 안에 ...
+2025-09-18 15:58:50,603 - __main__ - INFO -    - 리뷰어 매칭: False (ki** vs ch**)
+2025-09-18 15:58:50,603 - __main__ - INFO -    - 내용 유사도: 0.00 (False)
+2025-09-18 15:58:50,625 - __main__ - INFO - 🔍 [1] DOM 리뷰: ki** - 맛있게 잘 먹었습니다....
+2025-09-18 15:58:50,625 - __main__ - INFO -    - 리뷰어 매칭: True (ki** vs ki**)
+2025-09-18 15:58:50,626 - __main__ - INFO -    - 내용 유사도: 1.00 (True)
+2025-09-18 15:58:50,626 - __main__ - INFO - ✅ 리뷰 매칭 성공! 인덱스: 1
+2025-09-18 15:58:50,626 - __main__ - INFO - 🔍 답글 존재 여부 확인 중...
+2025-09-18 15:58:50,629 - __main__ - INFO -    - 선택자 1 (.ReviewReply__Container-sc-1536a88-0): 없음
+2025-09-18 15:58:50,632 - __main__ - INFO -    - 선택자 2 (.ReviewReply__ContentContainer-sc-1536a88-1): 없음
+2025-09-18 15:58:50,635 - __main__ - INFO -    - 선택자 3 ([class*="ReviewReply__Container"]): 없음
+2025-09-18 15:58:50,638 - __main__ - INFO -    - 선택자 4 ([class*="ReviewReply__Content"]): 없음
+2025-09-18 15:58:50,641 - __main__ - INFO -    - 선택자 5 (.owner-reply): 없음
+2025-09-18 15:58:50,642 - __main__ - INFO - ✅ 답글 없음 - 새 답글 작성 가능
+2025-09-18 15:58:50,642 - __main__ - INFO - 📝 답글 등록 시작: ki**
+2025-09-18 15:58:50,645 - __main__ - INFO - 답글 버튼 발견: button.ReviewReply__AddReplyButton-sc-1536a88-10:has-text("댓글쓰기")
+2025-09-18 15:58:52,690 - __main__ - INFO - 답글 입력창 발견: textarea.ReviewReply__CustomTextarea-sc-1536a88-5
+2025-09-18 15:58:53,766 - __main__ - INFO - 답글 입력 완료: ki**님, 맛있게 드셨다니 정말 기쁘네요! 😊 저희 큰손닭강정에 와주셔서 감사하고, 다음...
+2025-09-18 15:58:53,780 - __main__ - INFO - 등록 버튼 발견: div.ReviewReply__ActionButtonWrapper-sc-1536a88-8 button:has-text("등록")
+2025-09-18 15:58:55,809 - __main__ - INFO - 답글 등록 버튼 클릭 완료
+2025-09-18 15:58:57,818 - __main__ - INFO - [YOGIYO] 🔍 금지어 팝업 확인 중...
+2025-09-18 15:58:57,827 - __main__ - INFO - [YOGIYO] ✅ 요기요 금지어 팝업 없음 - 정상 처리
+2025-09-18 15:59:01,102 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.41cffb45-0875-4c9a-9b18-260c24015a40 "HTTP/1.1 200 OK"
+2025-09-18 15:59:01,103 - __main__ - INFO - ✅ 답글 등록 성공: ki**
+2025-09-18 15:59:01,192 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.41cffb45-0875-4c9a-9b18-260c24015a40 "HTTP/1.1 200 OK"
+2025-09-18 15:59:04,204 - __main__ - INFO - 🔄 [4/4] 리뷰 처리 중: 03ea2040-8f87-4f82-8eae-aee4028202e5 (ch**)
+2025-09-18 15:59:04,205 - __main__ - INFO -    - DSID: 9c9e2e1a31672326
+2025-09-18 15:59:04,205 - __main__ - INFO -    - 답글 길이: 133자
+2025-09-18 15:59:04,206 - __main__ - INFO - 🔍 실시간 리뷰 매칭 시작: ch**
+2025-09-18 15:59:04,206 - __main__ - INFO - 📝 매칭 대상 리뷰: ch** - 배달도 빠르고 1인 양도 괜찮고, 근데 먹다보면 안에 밀가루반죽..?이 계속 씹혀서 그부분...
+2025-09-18 15:59:04,230 - __main__ - INFO - 📄 페이지에서 1개 리뷰 요소 발견
+2025-09-18 15:59:04,277 - __main__ - INFO - 🔍 [0] DOM 리뷰: ch** - 배달도 빠르고 1인 양도 괜찮고, 근데 먹다보면 안에 ...
+2025-09-18 15:59:04,277 - __main__ - INFO -    - 리뷰어 매칭: True (ch** vs ch**)
+2025-09-18 15:59:04,277 - __main__ - INFO -    - 내용 유사도: 1.00 (True)
+2025-09-18 15:59:04,277 - __main__ - INFO - ✅ 리뷰 매칭 성공! 인덱스: 0
+2025-09-18 15:59:04,277 - __main__ - INFO - 🔍 답글 존재 여부 확인 중...
+2025-09-18 15:59:04,281 - __main__ - INFO -    - 선택자 1 (.ReviewReply__Container-sc-1536a88-0): 없음
+2025-09-18 15:59:04,285 - __main__ - INFO -    - 선택자 2 (.ReviewReply__ContentContainer-sc-1536a88-1): 없음
+2025-09-18 15:59:04,289 - __main__ - INFO -    - 선택자 3 ([class*="ReviewReply__Container"]): 없음
+2025-09-18 15:59:04,292 - __main__ - INFO -    - 선택자 4 ([class*="ReviewReply__Content"]): 없음
+2025-09-18 15:59:04,297 - __main__ - INFO -    - 선택자 5 (.owner-reply): 없음
+2025-09-18 15:59:04,297 - __main__ - INFO - ✅ 답글 없음 - 새 답글 작성 가능
+2025-09-18 15:59:04,297 - __main__ - INFO - 📝 답글 등록 시작: ch**
+2025-09-18 15:59:04,302 - __main__ - INFO - 답글 버튼 발견: button.ReviewReply__AddReplyButton-sc-1536a88-10:has-text("댓글쓰기")
+2025-09-18 15:59:06,350 - __main__ - INFO - 답글 입력창 발견: textarea.ReviewReply__CustomTextarea-sc-1536a88-5
+2025-09-18 15:59:07,416 - __main__ - INFO - 답글 입력 완료: ch**님, 소중한 리뷰 감사드려요! 😊 배달도 빠르게 받으셨다니 다행이네요. 밀가루 반죽...
+2025-09-18 15:59:07,426 - __main__ - INFO - 등록 버튼 발견: div.ReviewReply__ActionButtonWrapper-sc-1536a88-8 button:has-text("등록")
+2025-09-18 15:59:09,513 - __main__ - INFO - 답글 등록 버튼 클릭 완료
+2025-09-18 15:59:11,516 - __main__ - INFO - [YOGIYO] 🔍 금지어 팝업 확인 중...
+2025-09-18 15:59:11,525 - __main__ - INFO - [YOGIYO] ✅ 요기요 금지어 팝업 없음 - 정상 처리
+2025-09-18 15:59:14,800 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.03ea2040-8f87-4f82-8eae-aee4028202e5 "HTTP/1.1 200 OK"
+2025-09-18 15:59:14,802 - __main__ - INFO - ✅ 답글 등록 성공: ch**
+2025-09-18 15:59:14,865 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.03ea2040-8f87-4f82-8eae-aee4028202e5 "HTTP/1.1 200 OK"
+2025-09-18 15:59:17,876 - __main__ - INFO - 답글 등록 완료 - 성공: 4, 실패: 0
+2025-09-18 15:59:18,377 - __main__ - INFO - 리소스 정리 완료
+2025-09-23 09:41:19,393 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-23 09:41:19,394 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 09:41:19,394 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-23 09:41:19,394 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 09:41:19,427 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-23 09:41:19,427 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-23 09:41:19,437 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-23 09:41:19,437 - __main__ - INFO - 🔍 답글 대기 상태 리뷰 검색 중... (Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 09:41:19,437 - __main__ - INFO - 📊 데이터베이스 쿼리 조건:
+2025-09-23 09:41:19,437 - __main__ - INFO -    - 테이블: reviews_yogiyo
+2025-09-23 09:41:19,438 - __main__ - INFO -    - platform_store_id = 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 09:41:19,438 - __main__ - INFO -    - reply_status = 'draft'
+2025-09-23 09:41:19,438 - __main__ - INFO -    - reply_text IS NOT NULL
+2025-09-23 09:41:19,438 - __main__ - INFO -    - limit = unlimited
+2025-09-23 09:41:19,480 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating%2C%20schedulable_reply_date&platform_store_id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&reply_status=eq.draft&reply_text=neq.null "HTTP/1.1 200 OK"
+2025-09-23 09:41:19,481 - __main__ - INFO - 📝 초기 조회 결과: 1개 답글 대기 리뷰 발견
+2025-09-23 09:41:19,481 - __main__ - INFO -    1. ID:831d0db8-47d1-4fec-94c3-393dfeccfd1c | 리뷰어:kj** | 답글:122자 | 스케줄:2025-09-23T00:00:00
+2025-09-23 09:41:19,481 - __main__ - INFO - ⏰ 현재 시간: 2025-09-23 09:41:19.481813
+2025-09-23 09:41:19,481 - __main__ - INFO - 🔍 리뷰 검사 중: 831d0db8-47d1-4fec-94c3-393dfeccfd1c (kj**)
+2025-09-23 09:41:19,481 - __main__ - INFO -    - schedulable_reply_date: 2025-09-23T00:00:00 (타입: <class 'str'>)
+2025-09-23 09:41:19,481 - __main__ - INFO -    - 문자열 형식 스케줄 시간 파싱 중...
+2025-09-23 09:41:19,481 - __main__ - INFO -    - UTC 파싱 결과: 2025-09-23 00:00:00
+2025-09-23 09:41:19,481 - __main__ - INFO -    - KST 설정 결과: 2025-09-23 00:00:00+09:00
+2025-09-23 09:41:19,481 - __main__ - INFO -    - 최종 비교용 시간: 2025-09-23 00:00:00
+2025-09-23 09:41:19,481 - __main__ - INFO - ✅ 답글 등록 가능: 831d0db8-47d1-4fec-94c3-393dfeccfd1c (예약 시간 도달)
+2025-09-23 09:41:19,481 - __main__ - INFO - ✅ 리뷰 추가됨: 831d0db8-47d1-4fec-94c3-393dfeccfd1c (kj**)
+2025-09-23 09:41:19,481 - __main__ - INFO - 📊 최종 결과: 초기 1개 → 필터링 후 1개
+2025-09-23 09:41:19,481 - __main__ - INFO - 🎯 최종 선택된 리뷰:
+2025-09-23 09:41:19,481 - __main__ - INFO -    1. 831d0db8-47d1-4fec-94c3-393dfeccfd1c (kj**)
+2025-09-23 09:41:19,481 - __main__ - INFO - 1개 답글 처리 예정
+2025-09-23 09:41:20,400 - __main__ - INFO - 브라우저 초기화 완료
+2025-09-23 09:41:20,400 - __main__ - INFO - 요기요 CEO 로그인 시작
+2025-09-23 09:41:39,276 - __main__ - INFO - 로그인 성공 (URL: https://ceo.yogiyo.co.kr/)
+2025-09-23 09:41:39,277 - __main__ - INFO - 로그인 성공
+2025-09-23 09:41:39,277 - __main__ - INFO - 리뷰 페이지로 이동
+2025-09-23 09:41:42,568 - __main__ - INFO - 매장 선택: 1468227
+2025-09-23 09:41:42,645 - __main__ - INFO - 드롭다운 클릭 성공: div.StoreSelector__SelectedStore-sc-1rowjsb-13
+2025-09-23 09:41:44,694 - __main__ - INFO - 매장 선택 완료: 1468227
+2025-09-23 09:41:49,760 - __main__ - INFO - 미답변 탭 클릭 성공: 미답변 (1)
+2025-09-23 09:41:49,760 - __main__ - INFO - 미답변 탭 클릭 완료
+2025-09-23 09:41:49,765 - __main__ - INFO - 리뷰 컨테이너 1개 발견
+2025-09-23 09:41:49,814 - __main__ - INFO - 페이지에서 1개 리뷰 추출
+2025-09-23 09:41:49,814 - __main__ - INFO - 📄 페이지에서 추출된 리뷰: 1개
+2025-09-23 09:41:49,814 - __main__ - INFO - 🎯 처리할 DB 리뷰: 1개
+2025-09-23 09:41:49,815 - __main__ - INFO - 🔄 [1/1] 리뷰 처리 중: 831d0db8-47d1-4fec-94c3-393dfeccfd1c (kj**)
+2025-09-23 09:41:49,815 - __main__ - INFO -    - DSID: c0bf5ae71c3a9bda
+2025-09-23 09:41:49,815 - __main__ - INFO -    - 답글 길이: 122자
+2025-09-23 09:41:49,815 - __main__ - INFO - 🔍 실시간 리뷰 매칭 시작: kj**
+2025-09-23 09:41:49,815 - __main__ - INFO - 📝 매칭 대상 리뷰: kj** - 잘먹겠습니다 리뷰이벤트감자 좋아요...
+2025-09-23 09:41:49,819 - __main__ - INFO - 📄 페이지에서 1개 리뷰 요소 발견
+2025-09-23 09:41:49,831 - __main__ - INFO - 🔍 [0] DOM 리뷰: kj** - 잘먹겠습니다 리뷰이벤트감자 좋아요...
+2025-09-23 09:41:49,831 - __main__ - INFO -    - 리뷰어 매칭: True (kj** vs kj**)
+2025-09-23 09:41:49,831 - __main__ - INFO -    - 내용 유사도: 1.00 (True)
+2025-09-23 09:41:49,832 - __main__ - INFO - ✅ 리뷰 매칭 성공! 인덱스: 0
+2025-09-23 09:41:49,832 - __main__ - INFO - 🔍 답글 존재 여부 확인 중...
+2025-09-23 09:41:49,835 - __main__ - INFO -    - 선택자 1 (.ReviewReply__Container-sc-1536a88-0): 없음
+2025-09-23 09:41:49,838 - __main__ - INFO -    - 선택자 2 (.ReviewReply__ContentContainer-sc-1536a88-1): 없음
+2025-09-23 09:41:49,842 - __main__ - INFO -    - 선택자 3 ([class*="ReviewReply__Container"]): 없음
+2025-09-23 09:41:49,844 - __main__ - INFO -    - 선택자 4 ([class*="ReviewReply__Content"]): 없음
+2025-09-23 09:41:49,846 - __main__ - INFO -    - 선택자 5 (.owner-reply): 없음
+2025-09-23 09:41:49,846 - __main__ - INFO - ✅ 답글 없음 - 새 답글 작성 가능
+2025-09-23 09:41:49,846 - __main__ - INFO - 📝 답글 등록 시작: kj**
+2025-09-23 09:41:49,851 - __main__ - INFO - 답글 버튼 발견: button.ReviewReply__AddReplyButton-sc-1536a88-10:has-text("댓글쓰기")
+2025-09-23 09:41:51,924 - __main__ - INFO - 답글 입력창 발견: textarea.ReviewReply__CustomTextarea-sc-1536a88-5
+2025-09-23 09:41:52,970 - __main__ - INFO - 답글 입력 완료: kj**님, 소중한 리뷰 감사드립니다! 😊 이벤트 감자도 좋아하셨다니 기쁘네요. 다음에도 ...
+2025-09-23 09:41:52,975 - __main__ - INFO - 등록 버튼 발견: div.ReviewReply__ActionButtonWrapper-sc-1536a88-8 button:has-text("등록")
+2025-09-23 09:41:55,011 - __main__ - INFO - 답글 등록 버튼 클릭 완료
+2025-09-23 09:41:57,015 - __main__ - INFO - [YOGIYO] 🔍 금지어 팝업 확인 중...
+2025-09-23 09:41:57,024 - __main__ - INFO - [YOGIYO] ✅ 요기요 금지어 팝업 없음 - 정상 처리
+2025-09-23 09:42:00,381 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.831d0db8-47d1-4fec-94c3-393dfeccfd1c "HTTP/1.1 200 OK"
+2025-09-23 09:42:00,382 - __main__ - INFO - ✅ 답글 등록 성공: kj**
+2025-09-23 09:42:00,431 - httpx - INFO - HTTP Request: PATCH https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?id=eq.831d0db8-47d1-4fec-94c3-393dfeccfd1c "HTTP/1.1 200 OK"
+2025-09-23 09:42:03,446 - __main__ - INFO - 답글 등록 완료 - 성공: 1, 실패: 0
+2025-09-23 09:42:03,916 - __main__ - INFO - 리소스 정리 완료
+2025-09-23 10:20:52,251 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-23 10:20:52,253 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 10:20:52,253 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-23 10:20:52,253 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 10:20:52,287 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-23 10:20:52,288 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-23 10:20:52,309 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-23 10:20:52,309 - __main__ - INFO - 🔍 답글 대기 상태 리뷰 검색 중... (Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 10:20:52,309 - __main__ - INFO - 📊 데이터베이스 쿼리 조건:
+2025-09-23 10:20:52,309 - __main__ - INFO -    - 테이블: reviews_yogiyo
+2025-09-23 10:20:52,309 - __main__ - INFO -    - platform_store_id = 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 10:20:52,309 - __main__ - INFO -    - reply_status = 'draft'
+2025-09-23 10:20:52,309 - __main__ - INFO -    - reply_text IS NOT NULL
+2025-09-23 10:20:52,309 - __main__ - INFO -    - limit = unlimited
+2025-09-23 10:20:52,348 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating%2C%20schedulable_reply_date&platform_store_id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&reply_status=eq.draft&reply_text=neq.null "HTTP/1.1 200 OK"
+2025-09-23 10:20:52,348 - __main__ - INFO - ❌ 초기 조회 결과가 없습니다 (draft 상태 리뷰 없음)
+2025-09-23 10:20:52,348 - __main__ - INFO - 처리할 답글이 없습니다
+2025-09-23 10:20:52,348 - __main__ - INFO - 리소스 정리 완료
+2025-09-23 10:29:59,290 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-23 10:29:59,292 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 10:29:59,292 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-23 10:29:59,292 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 10:29:59,342 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-23 10:29:59,344 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-23 10:29:59,384 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-23 10:29:59,384 - __main__ - INFO - 🔍 답글 대기 상태 리뷰 검색 중... (Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 10:29:59,384 - __main__ - INFO - 📊 데이터베이스 쿼리 조건:
+2025-09-23 10:29:59,384 - __main__ - INFO -    - 테이블: reviews_yogiyo
+2025-09-23 10:29:59,385 - __main__ - INFO -    - platform_store_id = 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 10:29:59,385 - __main__ - INFO -    - reply_status = 'draft'
+2025-09-23 10:29:59,385 - __main__ - INFO -    - reply_text IS NOT NULL
+2025-09-23 10:29:59,385 - __main__ - INFO -    - limit = unlimited
+2025-09-23 10:29:59,418 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating%2C%20schedulable_reply_date&platform_store_id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&reply_status=eq.draft&reply_text=neq.null "HTTP/1.1 200 OK"
+2025-09-23 10:29:59,418 - __main__ - INFO - ❌ 초기 조회 결과가 없습니다 (draft 상태 리뷰 없음)
+2025-09-23 10:29:59,419 - __main__ - INFO - 처리할 답글이 없습니다
+2025-09-23 10:29:59,419 - __main__ - INFO - 리소스 정리 완료
+2025-09-23 12:31:26,804 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-23 12:31:26,805 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 12:31:26,805 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-23 12:31:26,806 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 12:31:26,842 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-23 12:31:26,843 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-23 12:31:26,863 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-23 12:31:26,863 - __main__ - INFO - 🔍 답글 대기 상태 리뷰 검색 중... (Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 12:31:26,863 - __main__ - INFO - 📊 데이터베이스 쿼리 조건:
+2025-09-23 12:31:26,863 - __main__ - INFO -    - 테이블: reviews_yogiyo
+2025-09-23 12:31:26,863 - __main__ - INFO -    - platform_store_id = 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 12:31:26,863 - __main__ - INFO -    - reply_status = 'draft'
+2025-09-23 12:31:26,863 - __main__ - INFO -    - reply_text IS NOT NULL
+2025-09-23 12:31:26,863 - __main__ - INFO -    - limit = unlimited
+2025-09-23 12:31:26,893 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating%2C%20schedulable_reply_date&platform_store_id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&reply_status=eq.draft&reply_text=neq.null "HTTP/1.1 200 OK"
+2025-09-23 12:31:26,893 - __main__ - INFO - ❌ 초기 조회 결과가 없습니다 (draft 상태 리뷰 없음)
+2025-09-23 12:31:26,893 - __main__ - INFO - 처리할 답글이 없습니다
+2025-09-23 12:31:26,893 - __main__ - INFO - 리소스 정리 완료
+2025-09-23 13:52:02,076 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=%2A&user_id=eq.a7654c42-10ed-435f-97d8-d2c2dfeccbcb&platform=eq.yogiyo&is_active=eq.True "HTTP/1.1 200 OK"
+2025-09-23 13:52:02,077 - __main__ - INFO - 매장 선택: 큰손닭강정-평택비전점 (UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 13:52:02,077 - __main__ - INFO - YogiyoReplyPoster 초기화 완료
+2025-09-23 13:52:02,077 - __main__ - INFO - 요기요 답글 등록 시작 - Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 13:52:02,150 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/platform_stores?select=platform_store_id%2C%20platform_id%2C%20platform_pw%2C%20store_name&id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&platform=eq.yogiyo "HTTP/1.1 200 OK"
+2025-09-23 13:52:02,151 - __main__ - INFO - 매장 정보 조회 성공: 큰손닭강정-평택비전점 (1468227)
+2025-09-23 13:52:02,178 - __main__ - INFO - DB에서 조회한 로그인 정보 사용
+2025-09-23 13:52:02,178 - __main__ - INFO - 🔍 답글 대기 상태 리뷰 검색 중... (Store UUID: 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d)
+2025-09-23 13:52:02,178 - __main__ - INFO - 📊 데이터베이스 쿼리 조건:
+2025-09-23 13:52:02,179 - __main__ - INFO -    - 테이블: reviews_yogiyo
+2025-09-23 13:52:02,179 - __main__ - INFO -    - platform_store_id = 8be2b4ab-a52c-40ea-b77a-2c89a09fe16d
+2025-09-23 13:52:02,179 - __main__ - INFO -    - reply_status = 'draft'
+2025-09-23 13:52:02,179 - __main__ - INFO -    - reply_text IS NOT NULL
+2025-09-23 13:52:02,179 - __main__ - INFO -    - limit = unlimited
+2025-09-23 13:52:02,242 - httpx - INFO - HTTP Request: GET https://efcdjsrumdrhmpingglp.supabase.co/rest/v1/reviews_yogiyo?select=id%2C%20yogiyo_dsid%2C%20reviewer_name%2C%20review_text%2C%20reply_text%2C%20reply_status%2C%20platform_store_id%2C%20review_date%2C%20overall_rating%2C%20schedulable_reply_date&platform_store_id=eq.8be2b4ab-a52c-40ea-b77a-2c89a09fe16d&reply_status=eq.draft&reply_text=neq.null "HTTP/1.1 200 OK"
+2025-09-23 13:52:02,244 - __main__ - INFO - ❌ 초기 조회 결과가 없습니다 (draft 상태 리뷰 없음)
+2025-09-23 13:52:02,244 - __main__ - INFO - 처리할 답글이 없습니다
+2025-09-23 13:52:02,245 - __main__ - INFO - 리소스 정리 완료
