@@ -29,9 +29,12 @@ class BaeminCrawler:
         self.browser = await playwright.chromium.launch(
             headless=True,
             args=[
-                # 자동화 감지 방지
+                # 자동화 감지 방지 강화
                 '--disable-blink-features=AutomationControlled',
                 '--disable-features=VizDisplayCompositor',
+                '--exclude-switches=enable-automation',
+                '--disable-automation',
+                '--disable-infobars',
 
                 # 보안 및 샌드박스
                 '--no-sandbox',
@@ -42,6 +45,8 @@ class BaeminCrawler:
                 '--disable-web-security',
                 '--disable-features=IsolateOrigins,site-per-process',
                 '--disable-site-isolation-trials',
+                '--disable-default-apps',
+                '--disable-popup-blocking',
 
                 # GPU 및 렌더링
                 '--disable-gpu',
@@ -61,6 +66,17 @@ class BaeminCrawler:
                 '--disable-ipc-flooding-protection',
                 '--memory-pressure-off',  # 메모리 압박 모드 비활성화
                 '--max_old_space_size=512',  # Node.js 메모리 제한
+
+                # 추가 우회 설정
+                '--disable-logging',
+                '--disable-login-animations',
+                '--disable-notifications',
+                '--disable-password-generation',
+                '--disable-save-password-bubble',
+                '--ignore-certificate-errors',
+                '--ignore-ssl-errors',
+                '--ignore-certificate-errors-spki-list',
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
 
                 # 언어 및 로케일 설정
                 '--lang=ko-KR',
@@ -91,30 +107,62 @@ class BaeminCrawler:
         
         self.page = await context.new_page()
         
-        # JavaScript 기반 스텔스 모드 강화
+        # 최고 수준의 JavaScript 스텔스 모드
         await self.page.add_init_script("""
             // WebDriver 속성 완전 제거
             delete navigator.__proto__.webdriver;
             delete navigator.webdriver;
+            delete window.navigator.webdriver;
 
-            // Chrome 런타임 객체 정의
+            // 모든 자동화 관련 속성 제거
+            delete navigator.automation;
+            delete window.navigator.automation;
+            delete window.webdriver;
+
+            // Chrome 런타임 객체 완전 구현
             Object.defineProperty(window, 'chrome', {
                 value: {
                     runtime: {
                         onConnect: null,
-                        onMessage: null
+                        onMessage: null,
+                        onConnectExternal: null,
+                        onInstalled: null
                     },
-                    loadTimes: function() { return {}; },
-                    csi: function() { return {}; },
+                    loadTimes: function() {
+                        return {
+                            requestTime: Date.now() - 1000,
+                            startLoadTime: Date.now() - 800,
+                            commitLoadTime: Date.now() - 600,
+                            finishDocumentLoadTime: Date.now() - 400,
+                            finishLoadTime: Date.now() - 200,
+                            firstPaintTime: Date.now() - 100,
+                            firstPaintAfterLoadTime: 0,
+                            navigationType: "Reload"
+                        };
+                    },
+                    csi: function() {
+                        return {
+                            startE: Date.now(),
+                            onloadT: Date.now(),
+                            pageT: Math.random() * 1000 + 500,
+                            tran: 15
+                        };
+                    },
                     app: {
                         isInstalled: false,
                         InstallState: {
                             DISABLED: 'disabled',
                             INSTALLED: 'installed',
                             NOT_INSTALLED: 'not_installed'
-                        }
+                        },
+                        getDetails: function() { return null; },
+                        getIsInstalled: function() { return false; },
+                        runningState: function() { return 'cannot_run'; }
                     }
-                }
+                },
+                writable: false,
+                enumerable: true,
+                configurable: false
             });
 
             // Navigator 속성 강화
@@ -178,6 +226,61 @@ class BaeminCrawler:
                 }),
                 configurable: true
             });
+
+            // 추가 핑거프린트 우회
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 4,
+                configurable: true
+            });
+
+            Object.defineProperty(navigator, 'deviceMemory', {
+                get: () => 8,
+                configurable: true
+            });
+
+            Object.defineProperty(navigator, 'connection', {
+                get: () => ({
+                    effectiveType: '4g',
+                    rtt: 100,
+                    downlink: 2,
+                    saveData: false
+                }),
+                configurable: true
+            });
+
+            // 브라우저 타이밍 API 우회
+            Object.defineProperty(window, 'performance', {
+                value: window.performance || {},
+                writable: true
+            });
+
+            if (window.performance && window.performance.timing) {
+                Object.defineProperty(window.performance, 'timing', {
+                    get: () => ({
+                        navigationStart: Date.now() - Math.random() * 1000,
+                        unloadEventStart: 0,
+                        unloadEventEnd: 0,
+                        redirectStart: 0,
+                        redirectEnd: 0,
+                        fetchStart: Date.now() - Math.random() * 800,
+                        domainLookupStart: Date.now() - Math.random() * 600,
+                        domainLookupEnd: Date.now() - Math.random() * 500,
+                        connectStart: Date.now() - Math.random() * 400,
+                        connectEnd: Date.now() - Math.random() * 300,
+                        requestStart: Date.now() - Math.random() * 200,
+                        responseStart: Date.now() - Math.random() * 100,
+                        responseEnd: Date.now() - Math.random() * 50,
+                        domLoading: Date.now() - Math.random() * 30,
+                        domInteractive: Date.now() - Math.random() * 20,
+                        domContentLoadedEventStart: Date.now() - Math.random() * 10,
+                        domContentLoadedEventEnd: Date.now(),
+                        domComplete: Date.now(),
+                        loadEventStart: Date.now(),
+                        loadEventEnd: Date.now()
+                    }),
+                    configurable: true
+                });
+            }
         """)
         
     async def cleanup(self):
@@ -192,20 +295,42 @@ class BaeminCrawler:
         try:
             print(f"[배민] 로그인 시도: {username}")
 
-            # 자연스러운 접근 경로 - 메인 페이지 먼저 방문
-            print("[배민] 메인 페이지 먼저 방문 (자연스러운 접근)")
-            await self.page.goto("https://www.baemin.com", wait_until='domcontentloaded', timeout=15000)
+            # 더욱 자연스러운 접근 경로
+            print("[배민] 네이버에서 검색하는 것처럼 접근")
+            await self.page.goto("https://www.naver.com", wait_until='domcontentloaded', timeout=15000)
             await asyncio.sleep(2)
 
-            # 일부 링크 클릭하여 자연스럽게 이동
+            # 검색어 입력 시뮬레이션
             try:
-                await self.page.hover('body')  # 마우스 움직임 시뮬레이션
-                await asyncio.sleep(1)
+                search_input = await self.page.query_selector("input[name='query']")
+                if search_input:
+                    await search_input.type("배달의민족 사장님", delay=100)
+                    await asyncio.sleep(1)
             except:
                 pass
 
-            # 로그인 페이지로 이동
+            # 배민 메인 페이지로 이동
+            print("[배민] 메인 페이지로 이동 (검색 후)")
+            await self.page.goto("https://www.baemin.com", wait_until='domcontentloaded', timeout=15000)
+            await asyncio.sleep(3)
+
+            # 자연스러운 브라우저 동작 시뮬레이션
+            try:
+                # 스크롤 동작
+                await self.page.evaluate("window.scrollTo(0, 100)")
+                await asyncio.sleep(1)
+                await self.page.evaluate("window.scrollTo(0, 0)")
+                await asyncio.sleep(1)
+
+                # 마우스 움직임
+                await self.page.hover('body')
+                await asyncio.sleep(2)
+            except:
+                pass
+
+            # 더 긴 대기 시간을 두고 로그인 페이지로 이동
             print(f"[배민] 로그인 페이지로 이동: {self.login_url}")
+            await asyncio.sleep(3)  # 더 긴 대기
             await self.page.goto(self.login_url, wait_until='domcontentloaded', timeout=30000)
 
             # 페이지가 완전히 로드될 때까지 대기
