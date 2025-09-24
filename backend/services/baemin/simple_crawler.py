@@ -77,8 +77,17 @@ class BaeminCrawler:
             
             # 로그인 페이지로 이동
             print(f"[배민] 로그인 페이지로 이동: {self.login_url}")
-            await self.page.goto(self.login_url, wait_until='networkidle', timeout=30000)
-            await asyncio.sleep(3)
+            await self.page.goto(self.login_url, wait_until='domcontentloaded', timeout=30000)
+
+            # 페이지가 완전히 로드될 때까지 대기
+            await asyncio.sleep(5)
+
+            # JavaScript 실행 완료 대기
+            try:
+                await self.page.wait_for_load_state('networkidle', timeout=10000)
+            except:
+                print("[배민] NetworkIdle 대기 실패, 계속 진행")
+                pass
 
             # 페이지 정보 확인
             current_url = self.page.url
