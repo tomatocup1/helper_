@@ -182,15 +182,15 @@ export default function AddStorePage() {
   }
 
   const handleStoreSelection = (storeId: string, checked: boolean) => {
-    setSelectedStores(prev => 
-      checked 
+    setSelectedStores(prev =>
+      checked
         ? [...prev, storeId]
         : prev.filter(id => id !== storeId)
     )
   }
 
   const handleSelectAll = () => {
-    setSelectedStores(discoveredStores.map(store => store.id))
+    setSelectedStores(discoveredStores.map(store => store.platform_store_id || store.id))
   }
 
   const handleSelectNone = () => {
@@ -202,9 +202,10 @@ export default function AddStorePage() {
 
     setIsRegistering(true)
     try {
-      const selectedStoreData = discoveredStores.filter(store => 
-        selectedStores.includes(store.id)
-      )
+      const selectedStoreData = discoveredStores.filter(store => {
+        const storeKey = store.platform_store_id || store.id;
+        return selectedStores.includes(storeKey);
+      })
 
       for (const store of selectedStoreData) {
         const response = await fetch(`${BACKEND_URL}/api/stores`, {
@@ -213,11 +214,11 @@ export default function AddStorePage() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            user_id: displayUser?.id,
+            user_id: displayUser?.id || user?.id || 'a7654c42-10ed-435f-97d8-d2c2dfeccbcb',
             platform: selectedPlatform,
             platform_store_id: store.platform_store_id,
-            store_name: store.name,
-            platform_url: store.platform_url,
+            store_name: store.store_name || store.name,
+            platform_url: store.platform_url || `https://${selectedPlatform}.com/store/${store.platform_store_id}`,
             platform_id: formData.platform_id,
             platform_pw: formData.platform_password,
           })
@@ -516,31 +517,34 @@ export default function AddStorePage() {
                     </div>
 
                     <div className="space-y-3">
-                      {discoveredStores.map((store) => (
-                        <div key={store.id} className="flex items-center space-x-3 p-4 bg-blue-50 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors">
-                          <Checkbox 
-                            checked={selectedStores.includes(store.id)}
-                            onCheckedChange={(checked) => handleStoreSelection(store.id, checked as boolean)}
-                          />
-                          <Store className="w-5 h-5 text-blue-600" />
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2">
-                              <p className="font-semibold text-lg">{store.name}</p>
-                              <Badge variant="secondary" className="text-xs">
-                                ID: {store.platform_store_id}
-                              </Badge>
+                      {discoveredStores.map((store) => {
+                        const storeKey = store.platform_store_id || store.id;
+                        return (
+                          <div key={storeKey} className="flex items-center space-x-3 p-4 bg-blue-50 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors">
+                            <Checkbox
+                              checked={selectedStores.includes(storeKey)}
+                              onCheckedChange={(checked) => handleStoreSelection(storeKey, checked as boolean)}
+                            />
+                            <Store className="w-5 h-5 text-blue-600" />
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
+                                <p className="font-semibold text-lg">{store.store_name || store.name}</p>
+                                <Badge variant="secondary" className="text-xs">
+                                  ID: {store.platform_store_id}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {currentPlatform?.name} 매장
+                              </p>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              {currentPlatform?.name} 매장
-                            </p>
+                            {selectedStores.includes(storeKey) && (
+                              <Badge className="bg-green-100 text-green-800 border-green-200">
+                                ✓ 선택됨
+                              </Badge>
+                            )}
                           </div>
-                          {selectedStores.includes(store.id) && (
-                            <Badge className="bg-green-100 text-green-800 border-green-200">
-                              ✓ 선택됨
-                            </Badge>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <div className="bg-gray-50 p-3 rounded-lg">
