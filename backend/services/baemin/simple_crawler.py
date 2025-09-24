@@ -25,38 +25,20 @@ class BaeminCrawler:
     async def initialize(self):
         """브라우저 초기화"""
         playwright = await async_playwright().start()
-        try:
-            # Chrome 채널 시도
-            self.browser = await playwright.chromium.launch(
-                headless=True,
-                channel='chrome',
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process',
-                    '--disable-gpu',
-                    '--no-first-run',
-                    '--disable-extensions'
-                ]
-            )
-        except Exception as e:
-            print(f"[배민] Chrome 채널 실패, Chromium으로 대체: {e}")
-            # Chromium 대체
-            self.browser = await playwright.chromium.launch(
-                headless=True,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process',
-                    '--disable-gpu',
-                    '--no-first-run',
-                    '--disable-extensions'
-                ]
-            )
+        # 서버 환경에서는 Chromium만 사용 (Chrome 없음)
+        self.browser = await playwright.chromium.launch(
+            headless=True,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--disable-gpu',
+                '--no-first-run',
+                '--disable-extensions'
+            ]
+        )
         
         context = await self.browser.new_context(
             viewport={'width': 1920, 'height': 1080},

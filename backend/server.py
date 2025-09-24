@@ -648,13 +648,13 @@ async def connect_platform(request_data: dict):
 
                 print(f"[DEBUG] Baemin real crawling for {credentials.get('username', 'N/A')}")
 
-                async with BaeminCrawler() as crawler:
-                    success, stores, message = await crawler.crawl_stores(
-                        credentials.get('username', ''),
-                        credentials.get('password', '')
-                    )
+                crawler = BaeminCrawler()
+                success, stores, message = await crawler.get_stores_async(
+                    credentials.get('username', ''),
+                    credentials.get('password', '')
+                )
 
-                    return {
+                return {
                         "success": success,
                         "message": message,
                         "stores": stores,
