@@ -648,6 +648,7 @@ async def connect_platform(request_data: dict):
 
                 print(f"[DEBUG] Baemin real crawling for {credentials.get('username', 'N/A')}")
 
+                # 크롤러 실행 (내부에서 initialize/cleanup 관리)
                 crawler = BaeminCrawler()
                 success, stores, message = await crawler.get_stores_async(
                     credentials.get('username', ''),

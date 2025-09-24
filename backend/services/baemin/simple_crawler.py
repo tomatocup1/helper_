@@ -48,15 +48,19 @@ class BaeminCrawler:
                 '--disable-gpu-sandbox',
                 '--disable-software-rasterizer',
 
-                # 기타 최적화
+                # 메모리 최적화
                 '--no-first-run',
                 '--disable-extensions',
                 '--disable-plugins',
-                '--disable-images',
+                '--disable-images',  # 이미지 로딩 비활성화로 메모리 절약
                 '--disable-background-timer-throttling',
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding',
                 '--disable-background-networking',
+                '--disable-javascript-harmony-shipping',
+                '--disable-ipc-flooding-protection',
+                '--memory-pressure-off',  # 메모리 압박 모드 비활성화
+                '--max_old_space_size=512',  # Node.js 메모리 제한
 
                 # 언어 및 로케일 설정
                 '--lang=ko-KR',
