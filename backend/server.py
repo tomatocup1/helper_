@@ -621,6 +621,56 @@ async def connect_platform(request_data: dict):
                     "timestamp": datetime.now().isoformat()
                 }
 
+        elif platform == 'naver':
+            try:
+                # 네이버는 현재 간단한 응답만 반환
+                print(f"[DEBUG] Naver platform not fully implemented yet")
+                return {
+                    "success": False,
+                    "message": "네이버 플레이스 연동은 준비 중입니다",
+                    "stores": [],
+                    "platform": platform,
+                    "timestamp": datetime.now().isoformat()
+                }
+            except Exception as e:
+                print(f"[ERROR] Naver error: {e}")
+                return {
+                    "success": False,
+                    "message": f"네이버 오류: {str(e)}",
+                    "stores": [],
+                    "platform": platform,
+                    "timestamp": datetime.now().isoformat()
+                }
+
+        elif platform == 'baemin':
+            try:
+                from services.baemin.simple_crawler import BaeminCrawler
+
+                print(f"[DEBUG] Baemin real crawling for {credentials.get('username', 'N/A')}")
+
+                async with BaeminCrawler() as crawler:
+                    success, stores, message = await crawler.crawl_stores(
+                        credentials.get('username', ''),
+                        credentials.get('password', '')
+                    )
+
+                    return {
+                        "success": success,
+                        "message": message,
+                        "stores": stores,
+                        "platform": platform,
+                        "timestamp": datetime.now().isoformat()
+                    }
+            except Exception as e:
+                print(f"[ERROR] Baemin error: {e}")
+                return {
+                    "success": False,
+                    "message": f"Baemin 오류: {str(e)}",
+                    "stores": [],
+                    "platform": platform,
+                    "timestamp": datetime.now().isoformat()
+                }
+
         elif platform == 'yogiyo':
             try:
                 from services.yogiyo.simple_crawler import YogiyoCrawler

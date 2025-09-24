@@ -28,7 +28,7 @@ class BaeminCrawler:
         try:
             # Chrome 채널 시도
             self.browser = await playwright.chromium.launch(
-                headless=False,
+                headless=True,
                 channel='chrome',
                 args=[
                     '--disable-blink-features=AutomationControlled',
@@ -36,21 +36,25 @@ class BaeminCrawler:
                     '--disable-dev-shm-usage',
                     '--disable-web-security',
                     '--disable-features=IsolateOrigins,site-per-process',
-                    '--start-maximized'
+                    '--disable-gpu',
+                    '--no-first-run',
+                    '--disable-extensions'
                 ]
             )
         except Exception as e:
             print(f"[배민] Chrome 채널 실패, Chromium으로 대체: {e}")
             # Chromium 대체
             self.browser = await playwright.chromium.launch(
-                headless=False,
+                headless=True,
                 args=[
                     '--disable-blink-features=AutomationControlled',
                     '--no-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-web-security',
                     '--disable-features=IsolateOrigins,site-per-process',
-                    '--start-maximized'
+                    '--disable-gpu',
+                    '--no-first-run',
+                    '--disable-extensions'
                 ]
             )
         
