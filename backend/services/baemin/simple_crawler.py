@@ -295,43 +295,20 @@ class BaeminCrawler:
         try:
             print(f"[배민] 로그인 시도: {username}")
 
-            # 더욱 자연스러운 접근 경로
-            print("[배민] 네이버에서 검색하는 것처럼 접근")
-            await self.page.goto("https://www.naver.com", wait_until='domcontentloaded', timeout=15000)
-            await asyncio.sleep(2)
-
-            # 검색어 입력 시뮬레이션
-            try:
-                search_input = await self.page.query_selector("input[name='query']")
-                if search_input:
-                    await search_input.type("배달의민족 사장님", delay=100)
-                    await asyncio.sleep(1)
-            except:
-                pass
-
-            # 배민 메인 페이지로 이동
-            print("[배민] 메인 페이지로 이동 (검색 후)")
-            await self.page.goto("https://www.baemin.com", wait_until='domcontentloaded', timeout=15000)
-            await asyncio.sleep(3)
+            # 사람처럼 직접 로그인 페이지로 이동
+            print(f"[배민] 로그인 페이지로 직접 이동: {self.login_url}")
+            await self.page.goto(self.login_url, wait_until='networkidle', timeout=30000)
 
             # 자연스러운 브라우저 동작 시뮬레이션
+            await asyncio.sleep(2)
             try:
-                # 스크롤 동작
-                await self.page.evaluate("window.scrollTo(0, 100)")
+                # 마우스 움직임으로 사람처럼 동작
+                await self.page.mouse.move(100, 100)
+                await asyncio.sleep(0.5)
+                await self.page.mouse.move(500, 300)
                 await asyncio.sleep(1)
-                await self.page.evaluate("window.scrollTo(0, 0)")
-                await asyncio.sleep(1)
-
-                # 마우스 움직임
-                await self.page.hover('body')
-                await asyncio.sleep(2)
             except:
                 pass
-
-            # 더 긴 대기 시간을 두고 로그인 페이지로 이동
-            print(f"[배민] 로그인 페이지로 이동: {self.login_url}")
-            await asyncio.sleep(3)  # 더 긴 대기
-            await self.page.goto(self.login_url, wait_until='domcontentloaded', timeout=30000)
 
             # 페이지가 완전히 로드될 때까지 대기
             await asyncio.sleep(5)
