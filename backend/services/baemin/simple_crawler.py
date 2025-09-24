@@ -25,42 +25,155 @@ class BaeminCrawler:
     async def initialize(self):
         """브라우저 초기화"""
         playwright = await async_playwright().start()
-        # 서버 환경에서는 Chromium만 사용 (Chrome 없음)
+        # 보안 우회를 위한 강화된 브라우저 설정
         self.browser = await playwright.chromium.launch(
             headless=True,
             args=[
+                # 자동화 감지 방지
                 '--disable-blink-features=AutomationControlled',
+                '--disable-features=VizDisplayCompositor',
+
+                # 보안 및 샌드박스
                 '--no-sandbox',
                 '--disable-dev-shm-usage',
+                '--disable-setuid-sandbox',
+
+                # 웹 보안 관련
                 '--disable-web-security',
                 '--disable-features=IsolateOrigins,site-per-process',
+                '--disable-site-isolation-trials',
+
+                # GPU 및 렌더링
                 '--disable-gpu',
+                '--disable-gpu-sandbox',
+                '--disable-software-rasterizer',
+
+                # 기타 최적화
                 '--no-first-run',
-                '--disable-extensions'
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-images',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-background-networking',
+
+                # 언어 및 로케일 설정
+                '--lang=ko-KR',
+                '--accept-lang=ko-KR,ko,en-US,en'
             ]
         )
-        
+
+        # 한국 환경으로 설정된 브라우저 컨텍스트
         context = await self.browser.new_context(
             viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            locale='ko-KR',
+            timezone_id='Asia/Seoul',
+            extra_http_headers={
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0'
+            }
         )
         
         self.page = await context.new_page()
         
-        # 자동화 감지 방지
+        # JavaScript 기반 스텔스 모드 강화
         await self.page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
+            // WebDriver 속성 완전 제거
+            delete navigator.__proto__.webdriver;
+            delete navigator.webdriver;
+
+            // Chrome 런타임 객체 정의
+            Object.defineProperty(window, 'chrome', {
+                value: {
+                    runtime: {
+                        onConnect: null,
+                        onMessage: null
+                    },
+                    loadTimes: function() { return {}; },
+                    csi: function() { return {}; },
+                    app: {
+                        isInstalled: false,
+                        InstallState: {
+                            DISABLED: 'disabled',
+                            INSTALLED: 'installed',
+                            NOT_INSTALLED: 'not_installed'
+                        }
+                    }
+                }
             });
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
-            });
+
+            // Navigator 속성 강화
             Object.defineProperty(navigator, 'languages', {
-                get: () => ['ko-KR', 'ko', 'en-US', 'en']
+                get: () => ['ko-KR', 'ko', 'en-US', 'en'],
+                configurable: true
             });
-            window.chrome = {
-                runtime: {}
-            };
+
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => Array.from({length: 5}, (_, i) => ({
+                    name: `Plugin ${i}`,
+                    filename: `plugin${i}.so`,
+                    description: `Plugin Description ${i}`,
+                    version: '1.0.0'
+                })),
+                configurable: true
+            });
+
+            Object.defineProperty(navigator, 'mimeTypes', {
+                get: () => Array.from({length: 5}, (_, i) => ({
+                    type: `application/plugin${i}`,
+                    suffixes: `p${i}`,
+                    description: `Plugin ${i} MIME Type`
+                })),
+                configurable: true
+            });
+
+            // 자동화 탐지 우회 - Permissions API
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                Promise.resolve({ state: Notification.permission }) :
+                originalQuery(parameters)
+            );
+
+            // 화면 해상도 및 색상 깊이 설정
+            Object.defineProperty(screen, 'colorDepth', {
+                get: () => 24,
+                configurable: true
+            });
+
+            Object.defineProperty(screen, 'pixelDepth', {
+                get: () => 24,
+                configurable: true
+            });
+
+            // 플러그인 배열 프로토타입 수정
+            Object.setPrototypeOf(navigator.plugins, PluginArray.prototype);
+            Object.setPrototypeOf(navigator.mimeTypes, MimeTypeArray.prototype);
+
+            // UserAgent 데이터 일관성 확보
+            Object.defineProperty(navigator, 'userAgentData', {
+                get: () => ({
+                    brands: [
+                        { brand: 'Google Chrome', version: '131' },
+                        { brand: 'Chromium', version: '131' },
+                        { brand: 'Not_A Brand', version: '24' }
+                    ],
+                    mobile: false,
+                    platform: 'Windows'
+                }),
+                configurable: true
+            });
         """)
         
     async def cleanup(self):
@@ -74,7 +187,19 @@ class BaeminCrawler:
         """배민 로그인"""
         try:
             print(f"[배민] 로그인 시도: {username}")
-            
+
+            # 자연스러운 접근 경로 - 메인 페이지 먼저 방문
+            print("[배민] 메인 페이지 먼저 방문 (자연스러운 접근)")
+            await self.page.goto("https://www.baemin.com", wait_until='domcontentloaded', timeout=15000)
+            await asyncio.sleep(2)
+
+            # 일부 링크 클릭하여 자연스럽게 이동
+            try:
+                await self.page.hover('body')  # 마우스 움직임 시뮬레이션
+                await asyncio.sleep(1)
+            except:
+                pass
+
             # 로그인 페이지로 이동
             print(f"[배민] 로그인 페이지로 이동: {self.login_url}")
             await self.page.goto(self.login_url, wait_until='domcontentloaded', timeout=30000)
