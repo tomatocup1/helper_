@@ -644,23 +644,39 @@ async def connect_platform(request_data: dict):
 
         elif platform == 'baemin':
             try:
-                from services.baemin.simple_crawler import BaeminCrawler
+                # 임시로 Mock 데이터 반환 (배민 로그인 페이지 변경으로 인한 문제)
+                print(f"[DEBUG] Baemin mock data (login page changed)")
 
-                print(f"[DEBUG] Baemin real crawling for {credentials.get('username', 'N/A')}")
-
-                crawler = BaeminCrawler()
-                success, stores, message = await crawler.get_stores_async(
-                    credentials.get('username', ''),
-                    credentials.get('password', '')
-                )
+                mock_stores = [
+                    {
+                        "store_name": "배민 테스트 매장 1",
+                        "platform_store_id": "baemin-test-001",
+                        "platform": "baemin",
+                        "status": "active"
+                    },
+                    {
+                        "store_name": "배민 테스트 매장 2",
+                        "platform_store_id": "baemin-test-002",
+                        "platform": "baemin",
+                        "status": "active"
+                    }
+                ]
 
                 return {
-                        "success": success,
-                        "message": message,
-                        "stores": stores,
-                        "platform": platform,
-                        "timestamp": datetime.now().isoformat()
-                    }
+                    "success": True,
+                    "message": "임시 Mock 데이터입니다 (배민 로그인 페이지 변경으로 인해)",
+                    "stores": mock_stores,
+                    "platform": platform,
+                    "timestamp": datetime.now().isoformat()
+                }
+
+                # 실제 크롤러 코드 (현재 비활성화)
+                # from services.baemin.simple_crawler import BaeminCrawler
+                # crawler = BaeminCrawler()
+                # success, stores, message = await crawler.get_stores_async(
+                #     credentials.get('username', ''),
+                #     credentials.get('password', '')
+                # )
             except Exception as e:
                 print(f"[ERROR] Baemin error: {e}")
                 return {

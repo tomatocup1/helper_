@@ -76,8 +76,38 @@ class BaeminCrawler:
             print(f"[배민] 로그인 시도: {username}")
             
             # 로그인 페이지로 이동
-            await self.page.goto(self.login_url, wait_until='networkidle')
-            await asyncio.sleep(2)
+            print(f"[배민] 로그인 페이지로 이동: {self.login_url}")
+            await self.page.goto(self.login_url, wait_until='networkidle', timeout=30000)
+            await asyncio.sleep(3)
+
+            # 페이지 정보 확인
+            current_url = self.page.url
+            title = await self.page.title()
+            print(f"[배민] 페이지 로드 완료 - URL: {current_url}")
+            print(f"[배민] 페이지 제목: {title}")
+
+            # 페이지에 있는 모든 input 요소 확인
+            try:
+                all_inputs = await self.page.evaluate('''
+                    () => {
+                        const inputs = Array.from(document.querySelectorAll('input'));
+                        return inputs.map(input => ({
+                            type: input.type,
+                            name: input.name,
+                            id: input.id,
+                            placeholder: input.placeholder,
+                            className: input.className,
+                            testId: input.getAttribute('data-testid')
+                        }));
+                    }
+                ''')
+                print(f"[배민] 페이지에서 발견된 input 요소들:")
+                for i, input_info in enumerate(all_inputs):
+                    print(f"  {i+1}. type: {input_info['type']}, name: {input_info['name']}, id: {input_info['id']}")
+                    print(f"     placeholder: {input_info['placeholder']}, testId: {input_info['testId']}")
+                    print(f"     className: {input_info['className']}")
+            except Exception as e:
+                print(f"[배민] 페이지 분석 오류: {e}")
             
             # ID 입력 - 여러 가능한 셀렉터 시도
             id_selectors = [
