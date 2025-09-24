@@ -307,22 +307,17 @@ class BaeminCrawler:
             # 사람처럼 페이지 둘러보기
             await asyncio.sleep(3)  # 페이지를 읽는 시간
 
-            # 랜덤하고 자연스러운 마우스 움직임
-            import random
-            for _ in range(3):
-                x = random.randint(100, 800)
-                y = random.randint(100, 600)
-                await self.page.mouse.move(x, y, steps=random.randint(5, 15))
-                await asyncio.sleep(random.uniform(0.5, 1.5))
+            # 간단한 사람 시뮬레이션 (메모리 효율적)
+            await self.page.mouse.move(300, 200)
+            await asyncio.sleep(1)
+            await self.page.mouse.move(600, 400)
+            await asyncio.sleep(1)
 
-            # 페이지 스크롤 (사람처럼 내용 확인)
+            # 간단한 스크롤
             await self.page.evaluate("window.scrollTo(0, 100)")
             await asyncio.sleep(1)
             await self.page.evaluate("window.scrollTo(0, 0)")
             await asyncio.sleep(2)
-
-            # 더 길게 대기 (사람이 페이지를 읽는 시간)
-            await asyncio.sleep(5)
 
             # JavaScript 실행 완료 대기
             try:
@@ -387,7 +382,7 @@ class BaeminCrawler:
                             await asyncio.sleep(1)
 
                             # 사람처럼 천천히 타이핑
-                            await element.type(username, delay=random.randint(50, 150))
+                            await element.type(username, delay=100)
                             print(f"[배민] ID 입력 성공 - 셀렉터: {selector}")
                             id_input_success = True
                             break
@@ -400,7 +395,7 @@ class BaeminCrawler:
                 return False
             
             # 사람처럼 잠깐 쉬고 다음 필드로
-            await asyncio.sleep(random.uniform(1, 2))
+            await asyncio.sleep(1.5)
 
             # 비밀번호 입력 - 여러 가능한 셀렉터 시도
             password_selectors = [
@@ -429,7 +424,7 @@ class BaeminCrawler:
                             await asyncio.sleep(1)
 
                             # 사람처럼 천천히 타이핑
-                            await element.type(password, delay=random.randint(50, 150))
+                            await element.type(password, delay=100)
                             print(f"[배민] 비밀번호 입력 성공 - 셀렉터: {selector}")
                             password_input_success = True
                             break
@@ -442,7 +437,7 @@ class BaeminCrawler:
                 return False
             
             # 사람처럼 입력 확인하고 로그인 버튼으로
-            await asyncio.sleep(random.uniform(1, 3))
+            await asyncio.sleep(2)
 
             # 로그인 버튼 클릭 - 여러 가능한 셀렉터 시도
             login_button_selectors = [
@@ -467,7 +462,7 @@ class BaeminCrawler:
                         if box:
                             # 버튼 근처로 자연스럽게 이동
                             await self.page.mouse.move(box['x'] + box['width']/2, box['y'] + box['height']/2, steps=15)
-                            await asyncio.sleep(random.uniform(0.5, 1))
+                            await asyncio.sleep(0.8)
 
                             # 사람처럼 살짝 망설이고 클릭
                             await self.page.mouse.click(box['x'] + box['width']/2, box['y'] + box['height']/2)
