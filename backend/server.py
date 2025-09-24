@@ -723,4 +723,6 @@ async def connect_platform(request_data: dict):
 if __name__ == "__main__":
     # 기본 포트는 8001, 환경변수로 변경 가능
     port = int(os.getenv("BACKEND_PORT", 8001))
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+
+    # 로컬 개발환경에서는 문자열로 전달 (reload 지원)
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=True)
