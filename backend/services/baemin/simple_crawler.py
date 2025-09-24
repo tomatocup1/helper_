@@ -79,35 +79,87 @@ class BaeminCrawler:
             await self.page.goto(self.login_url, wait_until='networkidle')
             await asyncio.sleep(2)
             
-            # ID 입력 - 정확한 셀렉터 사용
-            try:
-                await self.page.wait_for_selector('input[name="id"][data-testid="id"]', timeout=10000)
-                await self.page.fill('input[name="id"][data-testid="id"]', username)
-                print(f"[배민] ID 입력 성공")
-            except Exception as e:
-                print(f"[배민] ID 입력 실패: {e}")
+            # ID 입력 - 여러 가능한 셀렉터 시도
+            id_selectors = [
+                'input[name="id"][data-testid="id"]',
+                'input[name="id"]',
+                'input[data-testid="id"]',
+                'input[type="text"]',
+                'input[placeholder*="아이디"]',
+                'input[placeholder*="ID"]'
+            ]
+
+            id_input_success = False
+            for selector in id_selectors:
+                try:
+                    await self.page.wait_for_selector(selector, timeout=3000)
+                    await self.page.fill(selector, username)
+                    print(f"[배민] ID 입력 성공 - 셀렉터: {selector}")
+                    id_input_success = True
+                    break
+                except Exception as e:
+                    print(f"[배민] ID 셀렉터 {selector} 실패: {e}")
+                    continue
+
+            if not id_input_success:
+                print(f"[배민] 모든 ID 셀렉터 실패")
                 return False
             
             await asyncio.sleep(0.5)
             
-            # 비밀번호 입력 - 정확한 셀렉터 사용
-            try:
-                await self.page.wait_for_selector('input[name="password"][data-testid="password"]', timeout=10000)
-                await self.page.fill('input[name="password"][data-testid="password"]', password)
-                print(f"[배민] 비밀번호 입력 성공")
-            except Exception as e:
-                print(f"[배민] 비밀번호 입력 실패: {e}")
+            # 비밀번호 입력 - 여러 가능한 셀렉터 시도
+            password_selectors = [
+                'input[name="password"][data-testid="password"]',
+                'input[name="password"]',
+                'input[data-testid="password"]',
+                'input[type="password"]',
+                'input[placeholder*="비밀번호"]',
+                'input[placeholder*="password"]'
+            ]
+
+            password_input_success = False
+            for selector in password_selectors:
+                try:
+                    await self.page.wait_for_selector(selector, timeout=3000)
+                    await self.page.fill(selector, password)
+                    print(f"[배민] 비밀번호 입력 성공 - 셀렉터: {selector}")
+                    password_input_success = True
+                    break
+                except Exception as e:
+                    print(f"[배민] 비밀번호 셀렉터 {selector} 실패: {e}")
+                    continue
+
+            if not password_input_success:
+                print(f"[배민] 모든 비밀번호 셀렉터 실패")
                 return False
             
             await asyncio.sleep(0.5)
             
-            # 로그인 버튼 클릭 - 정확한 셀렉터 사용
-            try:
-                await self.page.wait_for_selector('button[type="submit"].Button__StyledButton-sc-1cxc4dz-0', timeout=10000)
-                await self.page.click('button[type="submit"].Button__StyledButton-sc-1cxc4dz-0')
-                print(f"[배민] 로그인 버튼 클릭 성공")
-            except Exception as e:
-                print(f"[배민] 로그인 버튼 클릭 실패: {e}")
+            # 로그인 버튼 클릭 - 여러 가능한 셀렉터 시도
+            login_button_selectors = [
+                'button[type="submit"].Button__StyledButton-sc-1cxc4dz-0',
+                'button[type="submit"]',
+                'button:has-text("로그인")',
+                'button:has-text("LOGIN")',
+                'input[type="submit"]',
+                '[data-testid="submit"]',
+                '.login-button'
+            ]
+
+            login_button_success = False
+            for selector in login_button_selectors:
+                try:
+                    await self.page.wait_for_selector(selector, timeout=3000)
+                    await self.page.click(selector)
+                    print(f"[배민] 로그인 버튼 클릭 성공 - 셀렉터: {selector}")
+                    login_button_success = True
+                    break
+                except Exception as e:
+                    print(f"[배민] 로그인 버튼 셀렉터 {selector} 실패: {e}")
+                    continue
+
+            if not login_button_success:
+                print(f"[배민] 모든 로그인 버튼 셀렉터 실패")
                 return False
             
             # 로그인 처리 대기
